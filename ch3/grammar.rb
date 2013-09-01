@@ -6,6 +6,9 @@ module LetGrammar
   @grammar = Grammar.rules do
     rule :start, r(:expression)
 
+    space, newline = one_of(' ', "\t"), one_of("\n", "\r")
+    ws = (space | newline).many.any.ignore
+
     # basic expressions
     num = one_of(/[0-9]/).many[:num] >> ->(s) {
       [ConstExpr.new(s[:num].map(&:text).join.to_i)]
@@ -18,9 +21,9 @@ module LetGrammar
     # non-basic expressions
     rule :expression, r(:diff) | r(:zero?) | r(:if) | r(:let) | basic_expr
 
-    # -(expr, expr)
+    # -(expr, expr), -(expr,     expr), -(expr,    \n\t expr), etc.
     rule :diff, (m('-(') > (basic_expr | r(:diff) | r(:if) | r(:let))[:first] >
-     m(', ') > (basic_expr | r(:diff) | r(:if) | r(:let))[:second] > m(')')) >> ->(s) {
+     m(', ') > ws > (basic_expr | r(:diff) | r(:if) | r(:let))[:second] > m(')')) >> ->(s) {
       [DiffExpr.new(*(s[:first] + s[:second]))]
     }
 
@@ -30,15 +33,15 @@ module LetGrammar
       [ZeroExpr.new(s[:expr].first)]
     }
 
-    # if expr then expr else expr 
-    rule :if, (m('if ') > (r(:diff) | r(:zero?) | r(:if) | r(:let) | ident)[:test] >
-     m(' then ') > (r(:expression))[:then] > m(' else ') > (r(:expression))[:else]) >> ->(s) {
+    # if expr (ws) then expr (ws) else expr 
+    rule :if, (m('if ') > (r(:diff) | r(:zero?) | r(:if) | r(:let) | ident)[:test] > ws >
+     m('then ') > (r(:expression))[:then] > ws > m('else ') > (r(:expression))[:else]) >> ->(s) {
       [IfExpr.new(*(s[:test] + s[:then] + s[:else]))]
     }
 
-    # let var = expr in expr
-    rule :let, (m('let ') > ident[:var] > m(' = ') > r(:expression)[:value] >
-     m(' in ') > r(:expression)[:body]) >> ->(s) {
+    # let var = expr (ws) in (ws) expr
+    rule :let, (m('let ') > ident[:var] > m(' = ') > r(:expression)[:value] > ws >
+     m('in') > ws > r(:expression)[:body]) >> ->(s) {
       [LetExpr.new(*(s[:var] + s[:value] + s[:body]))]
     }
   end
