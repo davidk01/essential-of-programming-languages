@@ -3,46 +3,57 @@ require_relative './ast'
 
 module LetGrammar
 
+  def self.arithmetic_class_map
+    @map ||= {'-' => Diff, '+' => Add, '*' => Mult, '/' => Div,
+     '=' => EqualTo, '>' => GreaterThan, '<' => LessThan}
+  end
+
   @grammar = Grammar.rules do
     rule :start, r(:expression)
 
     space, newline = one_of(' ', "\t"), one_of("\n", "\r")
-    ws = (space | newline).many.any.ignore
+    ws = (space | newline).many.ignore
 
     # basic expressions
     num = one_of(/[0-9]/).many[:num] >> ->(s) {
-      [ConstExpr.new(s[:num].map(&:text).join.to_i)]
+      [Const.new(s[:num].map(&:text).join.to_i)]
     }
     ident = one_of(/[a-zA-Z]/).many[:ident] >> ->(s) {
-      [VarExpr.new(s[:ident].map(&:text).join)]
+      [Var.new(s[:ident].map(&:text).join)]
     }
     basic_expr = num | ident
 
     # non-basic expressions
-    rule :expression, r(:diff) | r(:zero?) | r(:if) | r(:let) | basic_expr
+    rule :expression, r(:arithmetic_expression) | r(:minus) | r(:zero?) | r(:if) |
+     r(:let) | basic_expr
 
-    # -(expr, expr), -(expr,     expr), -(expr,    \n\t expr), etc.
-    rule :diff, (m('-(') > (basic_expr | r(:diff) | r(:if) | r(:let))[:first] >
-     m(', ') > ws > (basic_expr | r(:diff) | r(:if) | r(:let))[:second] > m(')')) >> ->(s) {
-      [DiffExpr.new(*(s[:first] + s[:second]))]
+    # op(expr, expr), op(expr,     expr), op(expr,   \n\t\n\r\n expr), etc.
+    rule :arithmetic_expression, (one_of(/[\-\+\*\/\=\>\<]/)[:op] > one_of('(') >
+     r(:expression)[:first] > m(',') > ws > r(:expression)[:second] >
+     one_of(')')) >> ->(s) {
+      [LetGrammar::arithmetic_class_map[s[:op][0].text].new(*(s[:first] + s[:second]))]
     }
 
-    # zero? (expr)
-    rule :zero?, (m('zero? (') > (basic_expr | r(:diff) | r(:if) |
-     r(:let))[:expr] > m(')')) >> ->(s) {
-      [ZeroExpr.new(s[:expr].first)]
+    # minus(expr)
+    rule :minus, (m('minus(') > r(:expression)[:expr] > one_of(')')) >> ->(s) {
+      [Minus.new(s[:expr].first)]
+    }
+
+    # zero?(expr)
+    rule :zero?, (m('zero?(') > r(:expression)[:expr] > m(')')) >> ->(s) {
+      [Zero.new(s[:expr].first)]
     }
 
     # if expr (ws) then expr (ws) else expr 
-    rule :if, (m('if ') > (r(:diff) | r(:zero?) | r(:if) | r(:let) | ident)[:test] > ws >
-     m('then ') > (r(:expression))[:then] > ws > m('else ') > (r(:expression))[:else]) >> ->(s) {
-      [IfExpr.new(*(s[:test] + s[:then] + s[:else]))]
+    rule :if, (m('if ') > r(:expression)[:test] > ws > m('then ') >
+     (r(:expression))[:then] > ws > m('else ') > (r(:expression))[:else]) >> ->(s) {
+      [If.new(*(s[:test] + s[:then] + s[:else]))]
     }
 
     # let var = expr (ws) in (ws) expr
     rule :let, (m('let ') > ident[:var] > m(' = ') > r(:expression)[:value] > ws >
      m('in') > ws > r(:expression)[:body]) >> ->(s) {
-      [LetExpr.new(*(s[:var] + s[:value] + s[:body]))]
+      [Let.new(*(s[:var] + s[:value] + s[:body]))]
     }
   end
 

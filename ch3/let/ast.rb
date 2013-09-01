@@ -2,38 +2,86 @@ require_relative './values'
 
 module LetGrammar
 
-  class ConstExpr < Struct.new(:value)
+  ##
+  # All the binary operator classes have a very generic structure
+  # when it comes to evaluation. So abstract the class creation
+  # and evaluation method definition.
+
+  def self.binary_operator_class(name, operator, eval_result_class)
+    klass = const_set(name, Class.new(Struct.new(:first, :second)))
+    klass.class_eval do
+      define_method(:eval) do |env|
+        first_result = first.eval(env).value
+        second_result = second.eval(env).value
+        eval_result_class.new(first_result.send(operator, second_result))
+      end
+    end
+  end
+
+  ##
+  # Numeric binary operator definitions
+
+  [[:Diff, :-], [:Add, :+], [:Mult, :*], [:Div, :/]].each do |op_def|
+    binary_operator_class(*op_def, NumVal)
+  end
+
+  ##
+  # Boolean binary operator definitions
+
+  [[:EqualTo, :==], [:GreaterThan, :>], [:LessThan, :<]].each do |op_def|
+    binary_operator_class(*op_def, BoolVal)
+  end
+
+  ##
+  # Currently only one type of constant exists, i.e. a number
+
+  class Const < Struct.new(:value)
     def eval(env)
       NumVal.new(value)
     end
   end
 
-  class VarExpr < Struct.new(:value)
+  ##
+  # Variable
+
+  class Var < Struct.new(:value)
     def eval(env)
       env[value]
     end
   end
 
-  class DiffExpr < Struct.new(:first, :second)
+  ##
+  # Unary minus
+
+  class Minus < Struct.new(:value)
     def eval(env)
-      NumVal.new(first.eval(env).value - second.eval(env).value)
+      NumVal.new(value.eval(env).value)
     end
   end
 
-  class ZeroExpr < Struct.new(:value)
+  ##
+  # Zero test
+
+  class Zero < Struct.new(:value)
     def eval(env)
       value.eval(env).value.zero? ? BoolVal.new(true) : BoolVal.new(false)
     end
   end
 
-  class IfExpr < Struct.new(:test, :then, :else)
+  ##
+  # Usual if expression
+
+  class If < Struct.new(:test, :then, :else)
     def eval(env)
       test.eval(env).value == true ?
        self.then.eval(env) : self.else.eval(env)
     end
   end
 
-  class LetExpr < Struct.new(:var, :value, :body)
+  ##
+  # Bind variables to expressions
+
+  class Let < Struct.new(:var, :value, :body)
     def eval(env)
       env[var.value] = value.eval(env); body.eval(env)
     end
