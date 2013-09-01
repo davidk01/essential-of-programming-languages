@@ -7,8 +7,8 @@ module LetGrammar
   # when it comes to evaluation. So abstract the class creation
   # and evaluation method definition.
 
-  def self.binary_operator_class(name, operator, eval_result_class)
-    klass = const_set(name, Class.new(Struct.new(:first, :second)))
+  def self.binary_operator_class(ast_class, operator, eval_result_class)
+    klass = const_set(ast_class, Class.new(Struct.new(:first, :second)))
     klass.class_eval do
       define_method(:eval) do |env|
         first_result = first.eval(env).value
