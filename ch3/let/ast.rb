@@ -87,4 +87,10 @@ module LetGrammar
     end
   end
 
+  ##
+  # List expressions
+
+  class List < Struct.new(:value)
+  end
+
 end
