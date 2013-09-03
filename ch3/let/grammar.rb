@@ -33,7 +33,7 @@ module LetGrammar
 
     # non-basic expressions
     rule :expression, r(:arithmetic_expression) | r(:unary_arithmetic_expression) | r(:if) |
-     r(:let) | r(:list) | r(:list_operations) | basic_expr
+     r(:let) | r(:list) | r(:list_operation) | basic_expr
 
     # emptylist or cons(expression, r(:list))
     emptylist = m('emptylist') >> ->(s) {
@@ -49,9 +49,9 @@ module LetGrammar
     list_operator = (m('car') | m('cdr') | m('null?'))[:op] >> ->(s) {
       [s[:op].map(&:text).join]
     }
-    rule :list_operations, (list_operator[:op] > one_of('(') > cut! > r(:list)[:list] >
+    rule :list_operation, (list_operator[:op] > one_of('(') > cut! > r(:list)[:list] >
      one_of(')')) >> ->(s) {
-      [LetGrammar::list_op_class_map[s[:op].first].new(s[:list].first]
+      [LetGrammar::list_op_class_map[s[:op].first].new(s[:list].first)]
     }
 
     # op(expr, expr), op(expr,     expr), op(expr,   \n\t\n\r\n expr), etc.
