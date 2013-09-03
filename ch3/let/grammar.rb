@@ -3,9 +3,13 @@ require_relative './ast'
 
 module LetGrammar
 
-  def self.arithmetic_class_map
-    @map ||= {'-' => Diff, '+' => Add, '*' => Mult, '/' => Div,
+  def self.arithmetic_op_class_map
+    @bin_op_map ||= {'-' => Diff, '+' => Add, '*' => Mult, '/' => Div,
      '=' => EqualTo, '>' => GreaterThan, '<' => LessThan}
+  end
+
+  def self.unary_op_class_map
+    @unary_op_map ||= {'minus' => Minus, 'zero?' => Zero}
   end
 
   @grammar = Grammar.rules do
@@ -24,8 +28,8 @@ module LetGrammar
     basic_expr = num | ident
 
     # non-basic expressions
-    rule :expression, r(:arithmetic_expression) | r(:minus) | r(:zero?) | r(:if) |
-     r(:let) | r(:list) | basic_expr
+    rule :expression, r(:arithmetic_expression) | r(:unary_arithmetic_expression) | r(:if) |
+     r(:let) | r(:list) | r(:list_operations) | basic_expr
 
     # emptylist or cons(expression, r(:list)
     emptylist = m('emptylist') >> ->(s) {
@@ -41,17 +45,16 @@ module LetGrammar
     rule :arithmetic_expression, (one_of(/[\-\+\*\/\=\>\<]/)[:op] > cut! > one_of('(') >
      r(:expression)[:first] > m(',') > ws > r(:expression)[:second] >
      one_of(')')) >> ->(s) {
-      [LetGrammar::arithmetic_class_map[s[:op][0].text].new(*(s[:first] + s[:second]))]
+      [LetGrammar::arithmetic_op_class_map[s[:op][0].text].new(*(s[:first] + s[:second]))]
     }
 
-    # minus(expr)
-    rule :minus, (m('minus(') > cut! > r(:expression)[:expr] > one_of(')')) >> ->(s) {
-      [Minus.new(s[:expr].first)]
+    # minus(expr), zero?(expr)
+    unary_expression = (m('minus') | m('zero?'))[:op] >> ->(s) {
+      [s[:op].map(&:text).join]
     }
-
-    # zero?(expr)
-    rule :zero?, (m('zero?(') > cut! > r(:expression)[:expr] > m(')')) >> ->(s) {
-      [Zero.new(s[:expr].first)]
+    rule :unary_arithmetic_expression, (unary_expression[:op] > one_of('(') > cut! >
+     r(:expression)[:expr] > one_of(')')) >> ->(s) {
+      [LetGrammar::unary_op_class_map[[:op].first].new(s[:expr].first)]
     }
 
     # if expr (ws) then expr (ws) else expr 
