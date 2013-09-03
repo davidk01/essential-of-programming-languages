@@ -31,37 +31,37 @@ module LetGrammar
     emptylist = m('emptylist') >> ->(s) {
       [List.new([])]
     }
-    non_empty_list = (m('cons(') > r(:expression)[:head] > (one_of(',').ignore > ws >
+    non_empty_list = (m('cons(') > cut! > r(:expression)[:head] > (one_of(',').ignore > ws >
      r(:list)).many.any[:tail] > one_of(')')) >> ->(s) {
       [List.new(s[:head] + s[:tail])]
     }
     rule :list, emptylist | non_empty_list
 
     # op(expr, expr), op(expr,     expr), op(expr,   \n\t\n\r\n expr), etc.
-    rule :arithmetic_expression, (one_of(/[\-\+\*\/\=\>\<]/)[:op] > one_of('(') >
+    rule :arithmetic_expression, (one_of(/[\-\+\*\/\=\>\<]/)[:op] > cut! > one_of('(') >
      r(:expression)[:first] > m(',') > ws > r(:expression)[:second] >
      one_of(')')) >> ->(s) {
       [LetGrammar::arithmetic_class_map[s[:op][0].text].new(*(s[:first] + s[:second]))]
     }
 
     # minus(expr)
-    rule :minus, (m('minus(') > r(:expression)[:expr] > one_of(')')) >> ->(s) {
+    rule :minus, (m('minus(') > cut! > r(:expression)[:expr] > one_of(')')) >> ->(s) {
       [Minus.new(s[:expr].first)]
     }
 
     # zero?(expr)
-    rule :zero?, (m('zero?(') > r(:expression)[:expr] > m(')')) >> ->(s) {
+    rule :zero?, (m('zero?(') > cut! > r(:expression)[:expr] > m(')')) >> ->(s) {
       [Zero.new(s[:expr].first)]
     }
 
     # if expr (ws) then expr (ws) else expr 
-    rule :if, (m('if') > ws > r(:expression)[:test] > ws > m('then') > ws >
+    rule :if, (m('if') > ws > cut! > r(:expression)[:test] > ws > m('then') > ws >
      (r(:expression))[:then] > ws > m('else') > ws > (r(:expression))[:else]) >> ->(s) {
       [If.new(*(s[:test] + s[:then] + s[:else]))]
     }
 
     # let var = expr (ws) in (ws) expr
-    rule :let, (m('let') > ws > ident[:var] > m(' = ') > r(:expression)[:value] > ws >
+    rule :let, (m('let') > cut! > ws > ident[:var] > m(' = ') > r(:expression)[:value] > ws >
      m('in') > ws > r(:expression)[:body]) >> ->(s) {
       [Let.new(*(s[:var] + s[:value] + s[:body]))]
     }
