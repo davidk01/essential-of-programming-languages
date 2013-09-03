@@ -91,6 +91,30 @@ module LetGrammar
   # List expressions
 
   class List < Struct.new(:value)
+    def eval(env)
+      ListVal.new(value.map {|x| x.eval(env)})
+    end
+  end
+
+  ##
+  # car, cdr, null?
+
+  class Car < Struct.new(:value)
+    def eval(env)
+      value.eval(env).value.first
+    end
+  end
+
+  class Cdr < Struct.new(:value)
+    def eval(env)
+      ListVal.new(value.eval(env).value[1..-1])
+    end
+  end
+
+  class Null < Struct.new(:value)
+    def eval(env)
+      BoolVal.new(value.eval(env).value.empty?)
+    end
   end
 
 end

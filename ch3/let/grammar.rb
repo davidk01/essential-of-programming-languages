@@ -12,6 +12,10 @@ module LetGrammar
     @unary_op_map ||= {'minus' => Minus, 'zero?' => Zero}
   end
 
+  def self.list_op_class_map
+    @list_op_map ||= {'car' => Car, 'cdr' => Cdr, 'null?' => Null}
+  end
+
   @grammar = Grammar.rules do
     rule :start, r(:expression)
 
@@ -31,7 +35,7 @@ module LetGrammar
     rule :expression, r(:arithmetic_expression) | r(:unary_arithmetic_expression) | r(:if) |
      r(:let) | r(:list) | r(:list_operations) | basic_expr
 
-    # emptylist or cons(expression, r(:list)
+    # emptylist or cons(expression, r(:list))
     emptylist = m('emptylist') >> ->(s) {
       [List.new([])]
     }
@@ -41,6 +45,15 @@ module LetGrammar
     }
     rule :list, emptylist | non_empty_list
 
+    # car, cdr, null?
+    list_operator = (m('car') | m('cdr') | m('null?'))[:op] >> ->(s) {
+      [s[:op].map(&:text).join]
+    }
+    rule :list_operations, (list_operator[:op] > one_of('(') > cut! > r(:list)[:list] >
+     one_of(')')) >> ->(s) {
+      [LetGrammar::list_op_class_map[s[:op].first].new(s[:list].first]
+    }
+
     # op(expr, expr), op(expr,     expr), op(expr,   \n\t\n\r\n expr), etc.
     rule :arithmetic_expression, (one_of(/[\-\+\*\/\=\>\<]/)[:op] > cut! > one_of('(') >
      r(:expression)[:first] > m(',') > ws > r(:expression)[:second] >
@@ -49,10 +62,10 @@ module LetGrammar
     }
 
     # minus(expr), zero?(expr)
-    unary_expression = (m('minus') | m('zero?'))[:op] >> ->(s) {
+    unary_operator = (m('minus') | m('zero?'))[:op] >> ->(s) {
       [s[:op].map(&:text).join]
     }
-    rule :unary_arithmetic_expression, (unary_expression[:op] > one_of('(') > cut! >
+    rule :unary_arithmetic_expression, (unary_operator[:op] > one_of('(') > cut! >
      r(:expression)[:expr] > one_of(')')) >> ->(s) {
       [LetGrammar::unary_op_class_map[[:op].first].new(s[:expr].first)]
     }
