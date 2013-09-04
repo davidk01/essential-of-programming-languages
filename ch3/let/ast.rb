@@ -88,6 +88,12 @@ module LetGrammar
   end
 
   ##
+  # Conditional expression
+
+  class Cond < Struct.new(:values)
+  end
+
+  ##
   # List expressions
 
   class List < Struct.new(:value)

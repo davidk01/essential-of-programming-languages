@@ -33,7 +33,16 @@ module LetGrammar
 
     # non-basic expressions
     rule :expression, r(:arithmetic_expression) | r(:unary_arithmetic_expression) | r(:if) |
-     r(:let) | r(:list) | r(:list_operation) | basic_expr
+     r(:let) | r(:list) | r(:list_operation) | r(:list_constructor) | r(:cond) | basic_expr
+
+    # TODO: test this
+    test_result_expr = (r(:expression)[:test] > m(' ==> ') >
+     r(:expression)[:value]) >> ->(s) {
+      [{:test => s[:test][0], :value => s[:value][0]}]
+    }
+    rule :cond, (m('cond') > ws > cut! > test_result_expr.many.any[:conds]) >> ->(s) {
+      [Cond.new(s[:conds])]
+    }
 
     # emptylist or cons(expression, r(:list))
     emptylist = m('emptylist') >> ->(s) {
@@ -44,6 +53,12 @@ module LetGrammar
       [List.new(s[:head] + s[:tail])]
     }
     rule :list, emptylist | non_empty_list
+
+    # list constructor
+    rule :list_constructor, (m('list(') > cut! > r(:expression)[:first] >
+     (one_of(',').ignore > ws > r(:expression)).many.any[:rest]) >> ->(s) {
+      [List.new(s[:first] + s[:rest])]
+    }
 
     # car, cdr, null?
     list_operator = (m('car') | m('cdr') | m('null?'))[:op] >> ->(s) {
