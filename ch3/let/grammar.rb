@@ -3,6 +3,9 @@ require_relative './ast'
 
 module LetGrammar
 
+  ##
+  # Various maps that take a string and map it to the AST node class.
+
   def self.arithmetic_op_class_map
     @bin_op_map ||= {'-' => Diff, '+' => Add, '*' => Mult, '/' => Div,
      '=' => EqualTo, '>' => GreaterThan, '<' => LessThan}
@@ -15,6 +18,9 @@ module LetGrammar
   def self.list_op_class_map
     @list_op_map ||= {'car' => Car, 'cdr' => Cdr, 'null?' => Null}
   end
+
+  ##
+  # The actual grammar. Could use some cleanup.
 
   @grammar = Grammar.rules do
     rule :start, r(:expression)
@@ -33,30 +39,33 @@ module LetGrammar
 
     # non-basic expressions
     rule :expression, r(:arithmetic_expression) | r(:unary_arithmetic_expression) | r(:if) |
-     r(:let) | r(:list) | r(:list_operation) | r(:list_constructor) | r(:cond) | basic_expr
+     r(:let) | r(:aug_list) | r(:list_operation) | r(:list_constructor) | r(:cond) |
+     r(:unpack) | basic_expr
 
-    # TODO: test this
+    # conditional expression "cond test ===> value, test2 ==> value2, ...", etc.
     test_result_expr = (r(:expression)[:test] > m(' ==> ') >
      r(:expression)[:value]) >> ->(s) {
       [{:test => s[:test][0], :value => s[:value][0]}]
     }
-    rule :cond, (m('cond') > ws > cut! > test_result_expr.many.any[:conds]) >> ->(s) {
-      [Cond.new(s[:conds])]
+    rule :cond, (m('cond') > ws > cut! > test_result_expr[:first] >
+     (m(',') > ws > test_result_expr).many.any[:rest]) >> ->(s) {
+      [Conds.new(s[:first] + s[:rest])]
     }
 
-    # emptylist or cons(expression, r(:list))
-    emptylist = m('emptylist') >> ->(s) {
-      [List.new([])]
-    }
+    # emptylist or cons(expression, r(:list)), all expression should refer to :aug_list
+    emptylist = m('emptylist').ignore
     non_empty_list = (m('cons(') > cut! > r(:expression)[:head] > (one_of(',').ignore > ws >
      r(:list)).many.any[:tail] > one_of(')')) >> ->(s) {
-      [List.new(s[:head] + s[:tail])]
+      [Cons.new(s[:head], s[:tail][0] || [])]
     }
     rule :list, emptylist | non_empty_list
+    rule :aug_list, r(:list)[:cons_tree] >> ->(s) {
+      [List.new(s[:cons_tree].first.flatten)]
+    }
 
     # list constructor
     rule :list_constructor, (m('list(') > cut! > r(:expression)[:first] >
-     (one_of(',').ignore > ws > r(:expression)).many.any[:rest]) >> ->(s) {
+     (one_of(',').ignore > ws > r(:expression)).many.any[:rest] > one_of(')')) >> ->(s) {
       [List.new(s[:first] + s[:rest])]
     }
 
@@ -64,7 +73,7 @@ module LetGrammar
     list_operator = (m('car') | m('cdr') | m('null?'))[:op] >> ->(s) {
       [s[:op].map(&:text).join]
     }
-    rule :list_operation, (list_operator[:op] > one_of('(') > cut! > r(:list)[:list] >
+    rule :list_operation, (list_operator[:op] > one_of('(') > cut! > r(:aug_list)[:list] >
      one_of(')')) >> ->(s) {
       [LetGrammar::list_op_class_map[s[:op].first].new(s[:list].first)]
     }
@@ -82,7 +91,7 @@ module LetGrammar
     }
     rule :unary_arithmetic_expression, (unary_operator[:op] > one_of('(') > cut! >
      r(:expression)[:expr] > one_of(')')) >> ->(s) {
-      [LetGrammar::unary_op_class_map[[:op].first].new(s[:expr].first)]
+      [LetGrammar::unary_op_class_map[s[:op].first].new(s[:expr].first)]
     }
 
     # if expr (ws) then expr (ws) else expr 
@@ -92,9 +101,26 @@ module LetGrammar
     }
 
     # let var = expr (ws) in (ws) expr
-    rule :let, (m('let') > cut! > ws > ident[:var] > m(' = ') > r(:expression)[:value] > ws >
+    single_let_expr = (ident[:var] > m(' = ') > cut! > r(:expression)[:value]) >> ->(s) {
+      [LetBinding.new(s[:var][0], s[:value][0])]
+    }
+    multiple_let_bindings = (single_let_expr[:first] > (one_of(',').ignore > ws >
+     single_let_expr).many.any[:rest]) >> ->(s) {
+      s[:first] + s[:rest]
+    }
+    rule :let, (m('let') > cut! > ws > multiple_let_bindings[:bindings] > ws >
      m('in') > ws > r(:expression)[:body]) >> ->(s) {
-      [Let.new(*(s[:var] + s[:value] + s[:body]))]
+      [Let.new(s[:bindings], s[:body][0])]
+    }
+
+    # unpack x, y, z = list(1, 2, 3) ==> x = 1, y = 2, z = 3
+    ident_list = (ident[:first] > (one_of(',').ignore > cut! > ws >
+     ident).many.any[:rest]) >> ->(s) {
+      s[:first] + s[:rest]
+    }
+    rule :unpack, (m('unpack') > cut! > ws > ident_list[:idents] > m(' = ') >
+     r(:expression)[:packed] > ws > m('in') > ws > r(:expression)[:body]) >> ->(s) {
+      [Unpack.new(s[:idents], s[:packed].first, s[:body].first)]
     }
   end
 

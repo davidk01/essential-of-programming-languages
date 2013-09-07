@@ -79,18 +79,44 @@ module LetGrammar
   end
 
   ##
-  # Bind variables to expressions
-
-  class Let < Struct.new(:var, :value, :body)
+  # Single variable to expression binding that is used
+  # in let expressions
+  
+  class LetBinding < Struct.new(:var, :value)
     def eval(env)
-      env[var.value] = value.eval(env); body.eval(env)
+      env[var.value] = value.eval(env)
     end
   end
 
   ##
-  # Conditional expression
+  # Bind variables to expressions
 
-  class Cond < Struct.new(:values)
+  class Let < Struct.new(:bindings, :body)
+    def eval(env)
+      bindings.each {|binder| binder.eval(env)}; body.eval(env)
+    end
+  end
+
+  ##
+  # List of conditional expressions. When evaluating we just
+  # return the first value for which the test expression evaluates
+  # to true.
+  
+  class Conds < Struct.new(:values)
+    def eval(env)
+      values.each do |cond|
+        return cond[:value].eval(env) if cond[:test].eval(env).value
+      end
+    end
+  end
+
+  ##
+  # Cons(head, tail)
+
+  class Cons < Struct.new(:head, :tail)
+    def flatten
+      head + tail.flatten
+    end
   end
 
   ##
@@ -99,6 +125,22 @@ module LetGrammar
   class List < Struct.new(:value)
     def eval(env)
       ListVal.new(value.map {|x| x.eval(env)})
+    end
+  end
+
+  ##
+  # Unpacker
+
+  class Unpack < Struct.new(:identifiers, :packed_expression, :body)
+    def eval(env)
+      evaluated_list = packed_expression.eval(env).value
+      if identifiers.length != evaluated_list.length
+        raise StandardError, "Malformed unpack expression."
+      end
+      identifiers.zip(evaluated_list).each {|var, value|
+        env[var.value] = value
+      }
+      body.eval(env)
     end
   end
 
