@@ -25,10 +25,11 @@ module LetGrammar
   @grammar = Grammar.rules do
     rule :start, r(:expression)
 
+    # whitespace
     space, newline = one_of(' ', "\t"), one_of("\n", "\r")
     ws = (space | newline).many.ignore
 
-    # basic expressions
+    # basic expressions: number, identifier, etc.
     num = one_of(/[0-9]/).many[:num] >> ->(s) {
       [Const.new(s[:num].map(&:text).join.to_i)]
     }
@@ -39,7 +40,7 @@ module LetGrammar
 
     # non-basic expressions
     rule :expression, r(:arithmetic_expression) | r(:unary_arithmetic_expression) | r(:if) |
-     r(:let) | r(:aug_list) | r(:list_operation) | r(:list_constructor) | r(:cond) |
+     r(:let) | r(:list) | r(:list_operation) | r(:list_constructor) | r(:cond) |
      r(:unpack) | basic_expr
 
     # conditional expression "cond test ===> value, test2 ==> value2, ...", etc.
@@ -52,15 +53,15 @@ module LetGrammar
       [Conds.new(s[:first] + s[:rest])]
     }
 
-    # emptylist or cons(expression, r(:list)), all expression should refer to :aug_list
+    # emptylist or cons(expression, r(:conslist)), all expression should refer to :list
     emptylist = m('emptylist').ignore
-    non_empty_list = (m('cons(') > cut! > r(:expression)[:head] > (one_of(',').ignore > ws >
-     r(:list)).many.any[:tail] > one_of(')')) >> ->(s) {
+    cons = (m('cons(') > cut! > r(:expression)[:head] > (one_of(',').ignore > ws >
+     r(:conslist)).many.any[:tail] > one_of(')')) >> ->(s) {
       [Cons.new(s[:head], s[:tail][0] || [])]
     }
-    rule :list, emptylist | non_empty_list
-    rule :aug_list, r(:list)[:cons_tree] >> ->(s) {
-      [List.new(s[:cons_tree].first.flatten)]
+    rule :conslist, emptylist | cons
+    rule :list, r(:conslist)[:constree] >> ->(s) {
+      [List.new(s[:constree].first.flatten)]
     }
 
     # list constructor
@@ -73,7 +74,7 @@ module LetGrammar
     list_operator = (m('car') | m('cdr') | m('null?'))[:op] >> ->(s) {
       [s[:op].map(&:text).join]
     }
-    rule :list_operation, (list_operator[:op] > one_of('(') > cut! > r(:aug_list)[:list] >
+    rule :list_operation, (list_operator[:op] > one_of('(') > cut! > r(:expression)[:list] >
      one_of(')')) >> ->(s) {
       [LetGrammar::list_op_class_map[s[:op].first].new(s[:list].first)]
     }
@@ -102,7 +103,7 @@ module LetGrammar
 
     # let var = expr (ws) in (ws) expr
     single_let_expr = (ident[:var] > m(' = ') > cut! > r(:expression)[:value]) >> ->(s) {
-      [LetBinding.new(s[:var][0], s[:value][0])]
+      [LetBinding.new(s[:var].first, s[:value].first)]
     }
     multiple_let_bindings = (single_let_expr[:first] > (one_of(',').ignore > ws >
      single_let_expr).many.any[:rest]) >> ->(s) {
