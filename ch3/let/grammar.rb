@@ -46,9 +46,9 @@ module LetGrammar
     # conditional expression "cond test ===> value, test2 ==> value2, ...", etc.
     test_result_expr = (r(:expression)[:test] > m(' ==> ') >
      r(:expression)[:value]) >> ->(s) {
-      [{:test => s[:test][0], :value => s[:value][0]}]
+      [{:test => s[:test].first, :value => s[:value].first}]
     }
-    rule :cond, (m('cond') > ws > cut! > test_result_expr[:first] >
+    rule :cond, (m('cond') > cut! > ws > test_result_expr[:first] >
      (m(',') > ws > test_result_expr).many.any[:rest]) >> ->(s) {
       [Conds.new(s[:first] + s[:rest])]
     }
@@ -57,7 +57,7 @@ module LetGrammar
     emptylist = m('emptylist').ignore
     cons = (m('cons(') > cut! > r(:expression)[:head] > (one_of(',').ignore > ws >
      r(:conslist)).many.any[:tail] > one_of(')')) >> ->(s) {
-      [Cons.new(s[:head], s[:tail][0] || [])]
+      [Cons.new(s[:head], s[:tail].first || [])]
     }
     rule :conslist, emptylist | cons
     rule :list, r(:conslist)[:constree] >> ->(s) {
@@ -74,7 +74,7 @@ module LetGrammar
     list_operator = (m('car') | m('cdr') | m('null?'))[:op] >> ->(s) {
       [s[:op].map(&:text).join]
     }
-    rule :list_operation, (list_operator[:op] > one_of('(') > cut! > r(:expression)[:list] >
+    rule :list_operation, (list_operator[:op] > cut! > one_of('(') > r(:expression)[:list] >
      one_of(')')) >> ->(s) {
       [LetGrammar::list_op_class_map[s[:op].first].new(s[:list].first)]
     }
@@ -114,7 +114,7 @@ module LetGrammar
       [Let.new(s[:bindings], s[:body][0])]
     }
 
-    # unpack x, y, z = list(1, 2, 3) ==> x = 1, y = 2, z = 3
+    # unpack x, y, z = list(1, 2, 3) maps to x = 1, y = 2, z = 3
     ident_list = (ident[:first] > (one_of(',').ignore > cut! > ws >
      ident).many.any[:rest]) >> ->(s) {
       s[:first] + s[:rest]

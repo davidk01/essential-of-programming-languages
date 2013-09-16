@@ -2,6 +2,13 @@ require_relative './values'
 
 module LetGrammar
 
+  class Scope
+    def initialize(inner, outer); @inner, @outer = inner, outer; end
+    def [](val); @inner[val] || @outer[val]; end
+    def []=(key, val); @inner[key] = val; end
+    def increment; new({}, self); end
+  end
+
   ##
   # All the binary operator classes have a very generic structure
   # when it comes to evaluation. So abstract the class creation
@@ -89,11 +96,13 @@ module LetGrammar
   end
 
   ##
-  # Bind variables to expressions
+  # Bind variables to expressions. Introduce a new scope for
+  # the let block.
 
   class Let < Struct.new(:bindings, :body)
     def eval(env)
-      bindings.each {|binder| binder.eval(env)}; body.eval(env)
+      new_env = env.increment
+      bindings.each {|binder| binder.eval(new_env)}; body.eval(new_env)
     end
   end
 
@@ -129,7 +138,8 @@ module LetGrammar
   end
 
   ##
-  # Unpacker
+  # Unpacker also introduces new scope for the unpacked
+  # bindings.
 
   class Unpack < Struct.new(:identifiers, :packed_expression, :body)
     def eval(env)
@@ -137,10 +147,11 @@ module LetGrammar
       if identifiers.length != evaluated_list.length
         raise StandardError, "Malformed unpack expression."
       end
+      new_env = env.increment
       identifiers.zip(evaluated_list).each {|var, value|
-        env[var.value] = value
+        new_env[var.value] = value
       }
-      body.eval(env)
+      body.eval(new_env)
     end
   end
 
