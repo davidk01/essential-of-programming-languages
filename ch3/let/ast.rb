@@ -6,7 +6,7 @@ module LetGrammar
     def initialize(inner, outer); @inner, @outer = inner, outer; end
     def [](val); @inner[val] || @outer[val]; end
     def []=(key, val); @inner[key] = val; end
-    def increment; new({}, self); end
+    def increment; Scope.new({}, self); end
   end
 
   ##
@@ -103,6 +103,33 @@ module LetGrammar
     def eval(env)
       new_env = env.increment
       bindings.each {|binder| binder.eval(new_env)}; body.eval(new_env)
+    end
+  end
+
+  ##
+  # Evaluating a procedure definition just means to take the current
+  # environment and stash it away
+
+  class Procedure < Struct.new(:variable, :body)
+    attr_reader :environment
+
+    def eval(env)
+      @environment = env; self
+    end
+  end
+
+  ##
+  # First we need to get the procedure from the environment. Then
+  # we need to evaluate the argument and then introduce a new scope
+  # with the argument set to that value. Finally we can evaluate
+  # the procedure.
+
+  class ProcedureCall < Struct.new(:procedure, :argument)
+    def eval(env)
+      evaled_proc = procedure.eval(env)
+      new_env = evaled_proc.environment.increment
+      new_env[evaled_proc.variable.value] = argument.eval(env)
+      evaled_proc.body.eval(new_env)
     end
   end
 

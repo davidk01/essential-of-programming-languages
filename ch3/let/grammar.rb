@@ -41,7 +41,19 @@ module LetGrammar
     # non-basic expressions
     rule :expression, r(:arithmetic_expression) | r(:unary_arithmetic_expression) | r(:if) |
      r(:let) | r(:list) | r(:list_operation) | r(:list_constructor) | r(:cond) |
-     r(:unpack) | basic_expr
+     r(:unpack) | r(:proc) | r(:proc_call) | basic_expr
+
+    # procedure definition: proc(identifier) expression
+    rule :proc, (m('proc(') > cut! > ident[:var] > one_of(')') > ws >
+     r(:expression)[:body]) >> ->(s) {
+      [Procedure.new(s[:var].first, s[:body].first)]
+    }
+
+    # procedure call: (expr expr)
+    rule :proc_call, (one_of('(') > cut! > r(:expression)[:proc] > ws >
+     r(:expression)[:argument] > one_of(')')) >> ->(s) {
+      [ProcedureCall.new(s[:proc].first, s[:argument].first)]
+    }
 
     # conditional expression "cond test ===> value, test2 ==> value2, ...", etc.
     test_result_expr = (r(:expression)[:test] > m(' ==> ') >
@@ -126,5 +138,7 @@ module LetGrammar
   end
 
   def self.parse(string); @grammar.parse(string); end
+
+  def self.eval(string); @grammar.parse(string).first.eval(Scope.new({}, {})); end
 
 end
