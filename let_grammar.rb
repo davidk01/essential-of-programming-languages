@@ -1,12 +1,9 @@
 require 'bundler/setup'
 require 'pegrb'
 
-module TestCases
-
-end
-
 module LetGrammar
 
+  # AST classes
   class ConstExp < Struct.new(:value); end
   class DiffExp < Struct.new(:expressions); end
   class ZeroCheck < Struct.new(:expressions); end
@@ -20,6 +17,7 @@ module LetGrammar
 
     sep = one_of(/\s/).many.ignore
 
+    # any sequence of digits, e.g. 123
     number = (one_of(/\d/).many[:digits] > cut!) >> ->(s) {
       [ConstExp.new(s[:digits].map(&:text).join.to_i)]
     }
