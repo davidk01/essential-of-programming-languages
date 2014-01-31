@@ -28,11 +28,13 @@ module LetGrammar
   class Identifier < Struct.new(:value); end
   class Binding < Struct.new(:variable, :value); end
   class LetExp < Struct.new(:binding, :body); end
+  class ListExp < Struct.new(:list); end
 
   @grammar = Grammar.rules do
 
     operator_class_mapping = {'-' => DiffExp, '+' => AddExp, '*' => MultExp, '/' => DivExp,
-     '<' => LessExp, '<=' => LessEqExp, '=' => EqExp, '>' => GreaterExp, '>=' => GreaterEqExp}
+     '<' => LessExp, '<=' => LessEqExp, '=' => EqExp, '>' => GreaterExp, '>=' => GreaterEqExp,
+    }
 
     whitespace = one_of(/\s/).many.any.ignore
 
@@ -63,6 +65,30 @@ module LetGrammar
       [s[:operator][0].new(s[:first] + s[:rest])]
     }
 
+    # list expressions: list(), list(expression {, expression}*)
+    empty_list = (m('list()') > cut!)>> ->(s) {
+      [ListExp.new([])] 
+    }
+
+    non_empty_list = (m('list(') > whitespace > cut! > r(:expression)[:head] >
+     (whitespace > one_of(',').ignore > whitespace > cut! > r(:expression)).many.any[:tail] >
+     whitespace > one_of(')') > cut!) >> ->(s) {
+      [ListExp.new(s[:head] + s[:tail])]
+    }
+
+    list_expression = empty_list | non_empty_list
+
+    # unary list operators
+    unary_list_operator = (m('car') | m('cdr') | m('null?'))[:list_operator] >> ->(s) {
+      #TODO: Implement this
+    }
+
+    unary_list_operator_expression = list_operator > one_of('(') > whitespace > cut! >
+     r(:expression) > whitespace > one_of(')') > cut!
+
+    # binary list operators
+    #TODO: Implement this
+
     # zero?(expression {, expression}+)
     zero_check = (m('zero?(') > whitespace > cut! > r(:expression)[:first] >
      (whitespace > one_of(',').ignore > whitespace > cut! > r(:expression)).many.any[:rest] >
@@ -77,6 +103,7 @@ module LetGrammar
       [IfExp.new(s[:test][0], s[:true][0], s[:false][0])]
     }
 
+    # non-space and non-paren characters all become identifiers
     identifier = one_of(/[^\s\(\)]/).many[:chars] >> ->(s) {
       [Identifier.new(s[:chars].map(&:text).join)]
     }
@@ -95,7 +122,7 @@ module LetGrammar
 
     # all the expressions together
     rule :expression, number | arithmetic_expression | zero_check |
-     if_expression | let_expression | identifier
+     if_expression | let_expression | list_expression | identifier
 
     rule :start, r(:expression)
 
