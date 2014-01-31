@@ -3,15 +3,36 @@ require 'pegrb'
 
 module LetGrammar
 
-  # AST classes
+  # Environment class. Basically just chained hashmaps mimicing the usual
+  # lexical scope structure we all know and love.
+  class Env
+    def initialize(inner, outer); @inner, @outer = inner, outer; end
+    def [](val); @inner[val] || @outer[val]; end
+    def []=(key, val); @inner[key] = val; end
+    def increment; Scope.new({}, self); end
+  end
+
+  # AST classes.
   class ConstExp < Struct.new(:value); end
   class DiffExp < Struct.new(:expressions); end
+  class AddExp < Struct.new(:expressions); end
+  class MultExp < Struct.new(:expressions); end
+  class DivExp < Struct.new(:expressions); end
+  class LessExp < Struct.new(:expressions); end
+  class LessEqExp < Struct.new(:expressions); end
+  class EqExp < Struct.new(:expressions); end
+  class GreaterExp < Struct.new(:expresssions); end
+  class GreaterEqExp < Struct.new(:expressions); end
   class ZeroCheck < Struct.new(:expressions); end
   class IfExp < Struct.new(:test, :true, :false); end
   class Identifier < Struct.new(:value); end
-  class LetExpression < Struct.new(:variable, :value, :body); end
+  class Binding < Struct.new(:variable, :value); end
+  class LetExp < Struct.new(:binding, :body); end
 
   @grammar = Grammar.rules do
+
+    operator_class_mapping = {'-' => DiffExp, '+' => AddExp, '*' => MultExp, '/' => DivExp,
+     '<' => LessExp, '<=' => LessEqExp, '=' => EqExp, '>' => GreaterExp, '>=' => GreaterEqExp}
 
     whitespace = one_of(/\s/).many.any.ignore
 
@@ -22,11 +43,24 @@ module LetGrammar
       [ConstExp.new(s[:digits].map(&:text).join.to_i)]
     }
 
-    # -(expression {, expression}+)
-    difference = (m('-(') > whitespace > cut! > r(:expression)[:first] >
-     (whitespace > one_of(',').ignore > whitespace > cut! > r(:expression)).many[:rest] >
-     whitespace > one_of(')') > cut!) >> ->(s) {
-       [DiffExp.new(s[:first] + s[:rest])]
+    # All order operators have a similar structure as well
+    order_operator = ((m('<=') | m('>=') | one_of('<', '=', '>'))[:operator] > cut!)>> ->(s) {
+      [operator_class_mapping[s[:operator].first.text]]
+    }
+
+    # All the operator expressions have a common structure so abstract it
+    arithmetic_operator = one_of('-', '+', '*', '/')[:operator] >> ->(s) {
+      [operator_class_mapping[s[:operator].first.text]]
+    }
+
+    # Combine the operators into one
+    general_arithmetic_operator = order_operator | arithmetic_operator
+
+    # {-, +, *, /, <, <=, =, >, >=}(expression {, expression}+)
+    arithmetic_expression = (general_arithmetic_operator[:operator] > one_of('(') > whitespace >
+     cut! > r(:expression)[:first] > (whitespace > one_of(',').ignore > whitespace > cut! >
+     r(:expression)).many[:rest] > whitespace > one_of(')') > cut!) >> ->(s) {
+      [s[:operator][0].new(s[:first] + s[:rest])]
     }
 
     # zero?(expression {, expression}+)
@@ -47,15 +81,20 @@ module LetGrammar
       [Identifier.new(s[:chars].map(&:text).join)]
     }
 
-    # let identifier = expression in expression
-    let_expression = (m('let') > sep > cut! > identifier[:variable] > sep >
-     one_of('=') > sep > cut! > r(:expression)[:value] > sep >
-     m('in') > sep > cut! > r(:expression)[:body] > cut!) >> ->(s) {
-      [LetExpression.new(s[:variable][0], s[:value][0], s[:body][0])]
+    # variable = expression
+    binding = (identifier[:variable] > sep > one_of('=') > sep > cut! >
+     r(:expression)[:value]) >> ->(s) {
+       [Binding.new(s[:variable][0], s[:value][0])]
     }
 
-    # all the expression together
-    rule :expression, number | difference | zero_check |
+    # let identifier = expression in expression
+    let_expression = (m('let') > sep > cut! > binding[:binding] > sep > cut! >
+     m('in') > sep > cut! > r(:expression)[:body] > cut!) >> ->(s) {
+      [LetExpression.new(s[:binding][0], s[:body][0])]
+    }
+
+    # all the expressions together
+    rule :expression, number | arithmetic_expression | zero_check |
      if_expression | let_expression | identifier
 
     rule :start, r(:expression)
