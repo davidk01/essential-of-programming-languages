@@ -3,7 +3,7 @@ require 'pegrb'
 
 module LetGrammar
 
-  # Environment class. Basically just chained hashmaps mimicing the usual
+  # Environment class. Basically just chained hashmaps modeling the usual
   # lexical scope structure we all know and love.
   class Env
     def initialize(inner, outer); @inner, @outer = inner, outer; end
@@ -29,11 +29,18 @@ module LetGrammar
   class Binding < Struct.new(:variable, :value); end
   class LetExp < Struct.new(:binding, :body); end
   class ListExp < Struct.new(:list); end
+  class CarExp < Struct.new(:list); end
+  class CdrExp < Struct.new(:list); end
+  class NullExp < Struct.new(:list); end
+  class ConsExp < Struct.new(:head, :tail); end
+  class Condition < Struct.new(:left, :right); end
+  class CondExp < Struct.new(:conditions); end
 
   @grammar = Grammar.rules do
 
     operator_class_mapping = {'-' => DiffExp, '+' => AddExp, '*' => MultExp, '/' => DivExp,
      '<' => LessExp, '<=' => LessEqExp, '=' => EqExp, '>' => GreaterExp, '>=' => GreaterEqExp,
+     'car' => CarExp, 'cdr' => CdrExp, 'null?' => NullExp, 'cons' => ConsExp
     }
 
     whitespace = one_of(/\s/).many.any.ignore
@@ -46,8 +53,8 @@ module LetGrammar
     }
 
     # All order operators have a similar structure as well
-    order_operator = ((m('<=') | m('>=') | one_of('<', '=', '>'))[:operator] > cut!)>> ->(s) {
-      [operator_class_mapping[s[:operator].first.text]]
+    order_operator = ((m('<=') | m('>=') | one_of('<', '=', '>'))[:operator] > cut!) >> ->(s) {
+      [operator_class_mapping[s[:operator].map(&:text).join]]
     }
 
     # All the operator expressions have a common structure so abstract it
@@ -79,15 +86,35 @@ module LetGrammar
     list_expression = empty_list | non_empty_list
 
     # unary list operators
-    unary_list_operator = (m('car') | m('cdr') | m('null?'))[:list_operator] >> ->(s) {
-      #TODO: Implement this
+    unary_list_operator = ((m('car') | m('cdr') | m('null?')) > cut!)[:list_operator] >> ->(s) {
+      [operator_class_mapping[s[:list_operator].map(&:text).join]]
     }
 
-    unary_list_operator_expression = list_operator > one_of('(') > whitespace > cut! >
-     r(:expression) > whitespace > one_of(')') > cut!
+    unary_list_operator_expression = (unary_list_operator[:op] > one_of('(') > whitespace > cut! >
+     r(:expression)[:list_expression] > whitespace > one_of(')') > cut!) >> ->(s) {
+      [s[:op][0].new(s[:list_expression][0])]
+    }
 
     # binary list operators
-    #TODO: Implement this
+    binary_list_operator = (m('cons') > cut!)[:list_operator] >> ->(s) {
+      [operator_class_mapping[s[:list_operator].map(&:text).join]]
+    }
+
+    binary_list_operator_expression = (binary_list_operator[:op] > one_of('(') > whitespace >
+     cut! > r(:expression)[:first] > whitespace > one_of(',') >
+     whitespace > cut! > r(:expression)[:second] > whitespace > one_of(')') > cut!) >> ->(s) {
+      [s[:op][0].new(s[:first][0], s[:second][0])]
+    }
+
+    # unary or binary list expressions
+    list_operator_expression = unary_list_operator_expression | binary_list_operator_expression
+
+    # cond expression
+    cond_expression = (m('cond') > cut! > (sep > r(:expression) > sep > m('==>').ignore >
+     cut! > sep > r(:expression)).many.any[:conditions] > whitespace >
+     m('end') > cut!) >> ->(s) {
+      [CondExp.new(s[:conditions].each_slice(2).map {|l, r| Condition.new(l, r)})]
+    }
 
     # zero?(expression {, expression}+)
     zero_check = (m('zero?(') > whitespace > cut! > r(:expression)[:first] >
@@ -103,8 +130,8 @@ module LetGrammar
       [IfExp.new(s[:test][0], s[:true][0], s[:false][0])]
     }
 
-    # non-space and non-paren characters all become identifiers
-    identifier = one_of(/[^\s\(\)]/).many[:chars] >> ->(s) {
+    # non-space, non-paren, non-comma characters all become identifiers
+    identifier = one_of(/[^\s\(\)\,]/).many[:chars] >> ->(s) {
       [Identifier.new(s[:chars].map(&:text).join)]
     }
 
@@ -115,6 +142,7 @@ module LetGrammar
     }
 
     # let identifier = expression in expression
+    # TODO: extend to allow for multiple bindings
     let_expression = (m('let') > sep > cut! > binding[:binding] > sep > cut! >
      m('in') > sep > cut! > r(:expression)[:body] > cut!) >> ->(s) {
       [LetExpression.new(s[:binding][0], s[:body][0])]
@@ -122,7 +150,8 @@ module LetGrammar
 
     # all the expressions together
     rule :expression, number | arithmetic_expression | zero_check |
-     if_expression | let_expression | list_expression | identifier
+     if_expression | let_expression | list_expression | list_operator_expression |
+     cond_expression | identifier
 
     rule :start, r(:expression)
 
