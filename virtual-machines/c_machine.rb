@@ -7,6 +7,7 @@ class CMachine
   # We need to keep track of the top of the stack (not sure why?) so
   # encapsulate that logic in one place to make sure the invariant is enforced.
   class Stack < Struct.new(:store, :sp)
+    def initialize; super([], -1); end
     def pop; self.sp = self.sp - 1; self.store.pop; end
     def push(*args); self.sp = self.sp + args.length; self.store.push(*args); end
     def [](val); self.store[val]; end
@@ -16,7 +17,7 @@ class CMachine
 
   # Set up the initial stack and registers.
   def initialize(c)
-    @code, @stack = c, Stack.new([], 0)
+    @code, @stack = c, Stack.new
     @pc, @ir = -1, nil
   end
 
@@ -26,31 +27,35 @@ class CMachine
     execute
   end
 
-  # TODO: implement :loada q m, :storea q m, :pop m
   # Instruction dispatcher.
   def execute
     case (sym = @ir.instruction)
+    when :pop
+      @ir.arguments[0].times { @stack.pop }
     when :loadc
       @stack.push(@ir.arguments[0])
     when :load
-      starting = @stack.pop
-      ending = starting + @ir.arguments[0]
-      while starting < ending
-        @stack.push @stack[starting]
-        starting += 1
+      starting, count = @stack.pop, @ir.arguments[0]
+      (0...count).each do |i|
+        @stack.push @stack[starting + i]
       end
     when :store
-      # TODO: Verify that this works as expected
-      starting = @stack.pop
-      ending = starting + @ir.arguments[0]
-      address = @stack.sp + 1
-      while starting <= (ending -= 1)
-        @stack[ending] = @stack[address -= 1]
+      ending = @stack.pop + (count = @ir.arguments[0]) - 1
+      address = @stack.sp
+      (0...count).each do |i|
+        @stack[ending - i] = @stack[address - i]
       end
     when :loada
-      @stack.push @stack[@ir.arguments[0]]
+      starting, count = *@ir.arguments
+      (0...count).each do |i|
+        @stack.push @stack[starting + i]
+      end
     when :storea
-      @stack[@ir.arguments[0]] = @stack.top_value
+      ending = @ir.arguments[0] + (count = @ir.arguments[1]) - 1
+      address = @stack.sp
+      (0...count).each do |i|
+        @stack[ending - i] = @stack[address - i]
+      end
     when :jump
       @pc = @ir.arguments[0]
     when :jumpz
@@ -81,9 +86,3 @@ class CMachine
   end
 
 end
-
-class CMachineTests
-
-  
-end
-require 'pry'; binding.pry
