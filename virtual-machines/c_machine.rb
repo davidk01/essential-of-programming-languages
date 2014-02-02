@@ -16,25 +16,51 @@ class CMachine
 
   # Set up the initial stack and registers.
   def initialize(c)
-    raise StandardError
     @code, @stack = c, Stack.new([], 0)
     @pc, @ir = -1, nil
   end
 
   # Retrieve next instruction and execute it.
-  def step; @ir = @code[@pc += 1]; execute; end
+  def step
+    @ir = @code[@pc += 1]
+    execute
+  end
 
+  # TODO: implement :loada q m, :storea q m, :pop m
   # Instruction dispatcher.
   def execute
-    raise StandardError
     case (sym = @ir.instruction)
     when :loadc
       @stack.push(@ir.arguments[0])
     when :load
-      @stack.push @stack[@stack.pop]
+      starting = @stack.pop
+      ending = starting + @ir.arguments[0]
+      while starting < ending
+        @stack.push @stack[starting]
+        starting += 1
+      end
     when :store
-      address = @stack.pop
-      @stack[address] = @stack.top_value
+      # TODO: Verify that this works as expected
+      starting = @stack.pop
+      ending = starting + @ir.arguments[0]
+      address = @stack.sp + 1
+      while starting <= (ending -= 1)
+        @stack[ending] = @stack[address -= 1]
+      end
+    when :loada
+      @stack.push @stack[@ir.arguments[0]]
+    when :storea
+      @stack[@ir.arguments[0]] = @stack.top_value
+    when :jump
+      @pc = @ir.arguments[0]
+    when :jumpz
+      condition = @stack.pop
+      if condition == 0 then @pc = @ir.arguments[0] end
+    when :jumpi
+      add = @stack.pop
+      @pc = @ir.arguments[0] + add
+    when :dup
+      @stack.push @stack.top_value
     when :*, :/, :+, :-, :%
       right = @stack.pop
       left = @stack.pop
