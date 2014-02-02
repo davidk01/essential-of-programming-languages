@@ -7,11 +7,11 @@ class CMachine
   # We need to keep track of the top of the stack (not sure why?) so
   # encapsulate that logic in one place to make sure the invariant is enforced.
   class Stack < Struct.new(:store, :sp)
-    def pop; sp -= 1; store.pop; end
-    def push(*args); sp += 1; store.push(*args); end
-    def [](val); store[val]; end
-    def []=(address, val); @store[address] = val; end
-    def top_value; store[-1]; end
+    def pop; self.sp = self.sp - 1; self.store.pop; end
+    def push(*args); self.sp = self.sp + args.length; self.store.push(*args); end
+    def [](val); self.store[val]; end
+    def []=(address, val); self.store[address] = val; end
+    def top_value; self.store[-1]; end
   end
 
   # Set up the initial stack and registers.
@@ -81,3 +81,9 @@ class CMachine
   end
 
 end
+
+class CMachineTests
+
+  
+end
+require 'pry'; binding.pry
