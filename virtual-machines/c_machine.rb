@@ -18,18 +18,21 @@ module CMachineGrammar
   class EqExp < Struct.new(:expressions); end
   class GreaterExp < Struct.new(:expresssions); end
   class GreaterEqExp < Struct.new(:expressions); end
+  class NotExp < Struct.new(:expression); end
+  class NegExp < Struct.new(:expression); end
 
   @grammar = Grammar.rules do
     
     # There is a common structure to expression of the form {op}(expr {, expr}+) so we
     # can map "op" to a class as soon as we see it.
     operator_class_mapping = {'-' => DiffExp, '+' => AddExp, '*' => MultExp, '/' => DivExp,
-     '<' => LessExp, '<=' => LessEqExp, '=' => EqExp, '>' => GreaterExp, '>=' => GreaterEqExp
+     '<' => LessExp, '<=' => LessEqExp, '=' => EqExp, '>' => GreaterExp, '>=' => GreaterEqExp,
+     'not' => NotExp, 'neg' => NegExp
     }
 
     ws, sep = one_of(/\s/).many.any.ignore, one_of(/\s/).many.ignore
 
-    number = (one_of(/\d/).many[:digits] > cut!) >> ->(s) {
+    number = one_of(/\d/).many[:digits] >> ->(s) {
       [ConstExp.new(s[:digits].map(&:text).join.to_i)]
     }
 
@@ -47,6 +50,15 @@ module CMachineGrammar
 
     general_arithmetic_operator = order_operator | arithmetic_operator
 
+    unary_operator = (m('not') | m('neg'))[:op] >> ->(s) {
+      [operator_class_mapping[s[:op].map(&:text).join]]
+    }
+
+    unary_expression = (unary_operator[:op] > one_of('(') > cut! > ws >
+     r(:expression)[:expression] > ws > one_of(')') > cut!) >> ->(s) {
+      [s[:op][0].new(s[:expression][0])]
+    }
+
     # op(expr {, expr}+)
     arithmetic_expression = (general_arithmetic_operator[:op] > one_of('(') > ws > cut! >
      r(:expression)[:first] > (ws > one_of(',').ignore > ws > cut! > r(:expression)).many[:rest] >
@@ -54,7 +66,7 @@ module CMachineGrammar
       [s[:op][0].new(s[:first] + s[:rest])]
     }
 
-    rule :expression, number | arithmetic_expression | identifier
+    rule :expression, arithmetic_expression | unary_expression | number | identifier
 
     rule :start, r(:expression)
 
