@@ -58,7 +58,7 @@ module LetGrammar
     }
 
     # All the operator expressions have a common structure so abstract it
-    arithmetic_operator = one_of('-', '+', '*', '/')[:operator] >> ->(s) {
+    arithmetic_operator = (one_of('-', '+', '*', '/')[:operator] > cut!) >> ->(s) {
       [operator_class_mapping[s[:operator].first.text]]
     }
 
