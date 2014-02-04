@@ -1,5 +1,3 @@
-require 'pegrb'
-require File.expand_path(File.dirname(__FILE__) + '/c_machine_grammar')
 require File.expand_path(File.dirname(__FILE__) + '/c_machine_stack')
 
 # The actual virtual machine class.

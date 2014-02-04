@@ -1,4 +1,3 @@
-require 'bundler/setup'
 require 'pegrb'
 
 module LetGrammar
@@ -21,12 +20,12 @@ module LetGrammar
   class LessExp < Struct.new(:expressions); end
   class LessEqExp < Struct.new(:expressions); end
   class EqExp < Struct.new(:expressions); end
-  class GreaterExp < Struct.new(:expresssions); end
+  class GreaterExp < Struct.new(:expressions); end
   class GreaterEqExp < Struct.new(:expressions); end
   class ZeroCheck < Struct.new(:expressions); end
   class IfExp < Struct.new(:test, :true, :false); end
   class Identifier < Struct.new(:value); end
-  class Binding < Struct.new(:variable, :value); end
+  class Assignment < Struct.new(:variable, :value); end
   class LetExp < Struct.new(:binding, :body); end
   class ListExp < Struct.new(:list); end
   class CarExp < Struct.new(:list); end
@@ -35,6 +34,9 @@ module LetGrammar
   class ConsExp < Struct.new(:head, :tail); end
   class Condition < Struct.new(:left, :right); end
   class CondExp < Struct.new(:conditions); end
+  class LetExpression < Struct.new(:assignments, :body); end
+  class Procedure < Struct.new(:arguments, :body); end
+  class ProcedureCall < Struct.new(:operator, :operands); end
 
   @grammar = Grammar.rules do
 
@@ -53,20 +55,20 @@ module LetGrammar
     }
 
     # All order operators have a similar structure as well
-    order_operator = ((m('<=') | m('>=') | one_of('<', '=', '>'))[:operator] > cut!) >> ->(s) {
+    order_op = ((m('<=') | m('>=') | one_of('<', '=', '>'))[:operator] > cut!) >> ->(s) {
       [operator_class_mapping[s[:operator].map(&:text).join]]
     }
 
     # All the operator expressions have a common structure so abstract it
-    arithmetic_operator = (one_of('-', '+', '*', '/')[:operator] > cut!) >> ->(s) {
+    arithmetic_op = (one_of('-', '+', '*', '/')[:operator] > cut!) >> ->(s) {
       [operator_class_mapping[s[:operator].first.text]]
     }
 
     # Combine the operators into one
-    general_arithmetic_operator = order_operator | arithmetic_operator
+    general_arithmetic_op = order_op | arithmetic_op
 
     # {-, +, *, /, <, <=, =, >, >=}(expression {, expression}+)
-    arithmetic_expression = (general_arithmetic_operator[:operator] > one_of('(') > whitespace >
+    arithmetic_expression = (general_arithmetic_op[:operator] > one_of('(') > whitespace >
      cut! > r(:expression)[:first] > (whitespace > one_of(',').ignore > whitespace > cut! >
      r(:expression)).many[:rest] > whitespace > one_of(')') > cut!) >> ->(s) {
       [s[:operator][0].new(s[:first] + s[:rest])]
@@ -74,7 +76,7 @@ module LetGrammar
 
     # list expressions: list(), list(expression {, expression}*)
     empty_list = (m('list()') > cut!)>> ->(s) {
-      [ListExp.new([])] 
+      [ListExp.new([])]
     }
 
     non_empty_list = (m('list(') > whitespace > cut! > r(:expression)[:head] >
@@ -86,28 +88,28 @@ module LetGrammar
     list_expression = empty_list | non_empty_list
 
     # unary list operators
-    unary_list_operator = ((m('car') | m('cdr') | m('null?')) > cut!)[:list_operator] >> ->(s) {
+    unary_list_op = ((m('car') | m('cdr') | m('null?')) > cut!)[:list_operator] >> ->(s) {
       [operator_class_mapping[s[:list_operator].map(&:text).join]]
     }
 
-    unary_list_operator_expression = (unary_list_operator[:op] > one_of('(') > whitespace > cut! >
+    unary_list_op_expression = (unary_list_op[:op] > one_of('(') > whitespace > cut! >
      r(:expression)[:list_expression] > whitespace > one_of(')') > cut!) >> ->(s) {
       [s[:op][0].new(s[:list_expression][0])]
     }
 
     # binary list operators
-    binary_list_operator = (m('cons') > cut!)[:list_operator] >> ->(s) {
+    binary_list_op = (m('cons') > cut!)[:list_operator] >> ->(s) {
       [operator_class_mapping[s[:list_operator].map(&:text).join]]
     }
 
-    binary_list_operator_expression = (binary_list_operator[:op] > one_of('(') > whitespace >
+    binary_list_op_expression = (binary_list_op[:op] > one_of('(') > whitespace >
      cut! > r(:expression)[:first] > whitespace > one_of(',') >
      whitespace > cut! > r(:expression)[:second] > whitespace > one_of(')') > cut!) >> ->(s) {
       [s[:op][0].new(s[:first][0], s[:second][0])]
     }
 
     # unary or binary list expressions
-    list_operator_expression = unary_list_operator_expression | binary_list_operator_expression
+    list_op_expression = unary_list_op_expression | binary_list_op_expression
 
     # cond expression
     cond_expression = (m('cond') > cut! > (sep > r(:expression) > sep > m('==>').ignore >
@@ -131,27 +133,40 @@ module LetGrammar
     }
 
     # non-space, non-paren, non-comma characters all become identifiers
-    identifier = one_of(/[^\s\(\)\,]/).many[:chars] >> ->(s) {
+    identifier = one_of(/[^\s\(\),]/).many[:chars] >> ->(s) {
       [Identifier.new(s[:chars].map(&:text).join)]
     }
 
     # variable = expression
-    binding = (identifier[:variable] > sep > one_of('=') > sep > cut! >
+    assignment = (identifier[:variable] > sep > one_of('=') > sep > cut! >
      r(:expression)[:value]) >> ->(s) {
-       [Binding.new(s[:variable][0], s[:value][0])]
+       [Assignment.new(s[:variable][0], s[:value][0])]
     }
 
-    # let identifier = expression in expression
-    # TODO: extend to allow for multiple bindings
-    let_expression = (m('let') > sep > cut! > binding[:binding] > sep > cut! >
-     m('in') > sep > cut! > r(:expression)[:body] > cut!) >> ->(s) {
-      [LetExpression.new(s[:binding][0], s[:body][0])]
+    # let identifier = expression {, identifier = expression }* in expression
+    let_expression = (m('let') > sep > cut! > assignment[:first] >
+     (whitespace > one_of(',').ignore > cut! > whitespace > assignment).many.any[:rest] >
+     sep > cut! > m('in') > sep > cut! > r(:expression)[:body] > cut!) >> ->(s) {
+      [LetExpression.new(s[:first] + s[:rest], s[:body][0])]
+    }
+
+    # procedures, proc (var1 {, var}*) expression
+    proc_expression = (m('proc') > cut! > whitespace > one_of('(') > identifier[:first] > cut! >
+     (whitespace > one_of(',') > whitespace > identifier).many.any[:rest] > one_of(')') > cut! > sep >
+     r(:expression)[:body]) >> ->(s) {
+      [Procedure.new(s[:first] + s[:rest], s[:body][0])]
+    }
+
+    # procedure call, lisp style, (expression expression)
+    proc_call_expression = (one_of('(') > cut! > whitespace > r(:expression)[:operator] >
+     (sep > r(:expression)).many[:operands] > whitespace > one_of(')') > cut!) >> ->(s) {
+      [ProcedureCall.new(s[:operator][0], s[:operands])]
     }
 
     # all the expressions together
     rule :expression, number | arithmetic_expression | zero_check |
-     if_expression | let_expression | list_expression | list_operator_expression |
-     cond_expression | identifier
+     if_expression | let_expression | list_expression | list_op_expression |
+     cond_expression | proc_expression | proc_call_expression | identifier
 
     rule :start, r(:expression)
 

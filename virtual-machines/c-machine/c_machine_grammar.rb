@@ -1,3 +1,5 @@
+require 'pegrb'
+
 # The grammar that describes the subset of C we are going to work with.
 # I have taken some liberties with how arithmetic operations are defined
 # because I don't want to worry about precedence. So all arithmetic operations
