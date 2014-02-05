@@ -12,35 +12,120 @@ module LetGrammar
   end
 
   # AST classes.
-  class ConstExp < Struct.new(:value); end
-  class DiffExp < Struct.new(:expressions); end
-  class AddExp < Struct.new(:expressions); end
-  class MultExp < Struct.new(:expressions); end
-  class DivExp < Struct.new(:expressions); end
-  class LessExp < Struct.new(:expressions); end
-  class LessEqExp < Struct.new(:expressions); end
-  class EqExp < Struct.new(:expressions); end
-  class GreaterExp < Struct.new(:expressions); end
-  class GreaterEqExp < Struct.new(:expressions); end
-  class ZeroCheck < Struct.new(:expressions); end
-  class IfExp < Struct.new(:test, :true, :false); end
-  class Identifier < Struct.new(:value); end
-  class Assignment < Struct.new(:variable, :value); end
-  class LetExp < Struct.new(:binding, :body); end
-  class ListExp < Struct.new(:list); end
-  class CarExp < Struct.new(:list); end
-  class CdrExp < Struct.new(:list); end
-  class NullExp < Struct.new(:list); end
-  class ConsExp < Struct.new(:head, :tail); end
-  class Condition < Struct.new(:left, :right); end
-  class CondExp < Struct.new(:conditions); end
-  class LetExpression < Struct.new(:assignments, :body); end
-  class Procedure < Struct.new(:arguments, :body); end
-  class ProcedureCall < Struct.new(:operator, :operands); end
+  class ConstExp < Struct.new(:value)
+    def eval(_); self.value; end
+  end
+
+  # Common evaluation strategy so we abstract it.
+  class ArithmeticOp < Struct.new(:expressions)
+    # We again use lazy enumerators to not evaluate all the expressions. There might be
+    # a type error along the way so evaluating all the expressions and then hitting a type
+    # error is wasted effort. Evaluate only when necessary and die as soon as we have a type error.
+    def eval(env, op)
+      accumulator = self.expressions[0].eval(env)
+      self.expressions.lazy.drop(1).each {|x| accumulator = accumulator.send(op, x.eval(env))}
+    end
+  end
+
+  # Just need the right symbol to evaluate.
+  class DiffExp < ArithmeticOp
+    def eval(env); super(env, :-); end
+  end
+  class AddExp < ArithmeticOp
+    def eval(env); super(env, :+); end
+  end
+  class MultExp < ArithmeticOp
+    def eval(env); super(env, :*); end
+  end
+  class DivExp < ArithmeticOp
+    def eval(env); super(env, :/); end
+  end
+  class ModExp < ArithmeticOp
+    def eval(env); super(env, :%); end
+  end
+
+  # Similar kind of abstraction as for +ArithmeticOp+.
+  class OrderOp < Struct.new(:expressions)
+    # We use lazy enumerators for short circuiting the operations because we don't
+    # need to evaluate all the expressions. We can bail as soon as we see a false result.
+    # We are assuming a finite collection of expressions and in the absence of macros this
+    # assumption holds.
+    def eval(env, op)
+      lazy_expressions = self.expressions.lazy
+      pairs = lazy_expressions.zip(lazy_expressions.drop(1)).take(self.expression.length - 1)
+      pairs.each {|x, y| return false unless x.eval(env).send(op, y.eval(env))}
+      true
+    end
+  end
+
+  # Just need the right symbol to evaluate.
+  class LessExp < OrderOp
+    def eval(env); super(env, :<); end
+  end
+  class LessEqExp < OrderOp
+    def eval(env); super(env, :<=); end
+  end
+  class EqExp < OrderOp
+    def eval(env); super(env, :==); end
+  end
+  class GreaterExp < OrderOp
+    def eval(env); super(env, :>); end
+  end
+  class GreaterEqExp < OrderOp
+    def eval(env); super(env, :>=); end
+  end
+
+  class ZeroCheck < Struct.new(:expressions)
+    def eval(env)
+      self.expressions.all? {|x| x.eval(env) == 0}
+    end
+  end
+
+  class IfExp < Struct.new(:test, :true_branch, :false_branch)
+  end
+
+  class Identifier < Struct.new(:value)
+  end
+
+  class Assignment < Struct.new(:variable, :value)
+  end
+
+  class LetExp < Struct.new(:binding, :body)
+  end
+
+  class ListExp < Struct.new(:list)
+  end
+
+  class CarExp < Struct.new(:list)
+  end
+
+  class CdrExp < Struct.new(:list)
+  end
+
+  class NullExp < Struct.new(:list)
+  end
+
+  class ConsExp < Struct.new(:head, :tail)
+  end
+
+  class Condition < Struct.new(:left, :right)
+  end
+
+  class CondExp < Struct.new(:conditions)
+  end
+
+  class LetExpression < Struct.new(:assignments, :body)
+  end
+
+  class Procedure < Struct.new(:arguments, :body)
+  end
+
+  class ProcedureCall < Struct.new(:operator, :operands)
+  end
 
   @grammar = Grammar.rules do
 
-    operator_class_mapping = {'-' => DiffExp, '+' => AddExp, '*' => MultExp, '/' => DivExp,
+    operator_class_mapping = {'-' => DiffExp, '+' => AddExp, '*' => MultExp, '/' => DivExp, '%' => ModExp,
      '<' => LessExp, '<=' => LessEqExp, '=' => EqExp, '>' => GreaterExp, '>=' => GreaterEqExp,
      'car' => CarExp, 'cdr' => CdrExp, 'null?' => NullExp, 'cons' => ConsExp
     }
