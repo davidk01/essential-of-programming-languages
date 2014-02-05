@@ -2,13 +2,14 @@ require 'pegrb'
 
 module LetGrammar
 
-  # Environment class. Basically just chained hashmaps modeling the usual
-  # lexical scope structure we all know and love.
+  # Environment class. Basically just chained hash maps modeling the usual
+  # lexical scope structure we all know and love. Not optimized at all for any
+  # kind of special access patterns.
   class Env
     def initialize(inner, outer); @inner, @outer = inner, outer; end
     def [](val); @inner[val] || @outer[val]; end
     def []=(key, val); @inner[key] = val; end
-    def increment; Scope.new({}, self); end
+    def increment; Env.new({}, self); end
   end
 
   # AST classes.
@@ -24,6 +25,7 @@ module LetGrammar
     def eval(env, op)
       accumulator = self.expressions[0].eval(env)
       self.expressions.lazy.drop(1).each {|x| accumulator = accumulator.send(op, x.eval(env))}
+      accumulator
     end
   end
 
@@ -51,8 +53,8 @@ module LetGrammar
     # We are assuming a finite collection of expressions and in the absence of macros this
     # assumption holds.
     def eval(env, op)
-      lazy_expressions = self.expressions.lazy
-      pairs = lazy_expressions.zip(lazy_expressions.drop(1)).take(self.expression.length - 1)
+      lazy_exprs = self.expressions.lazy
+      pairs = lazy_exprs.zip(lazy_exprs.drop(1)).take(self.expression.length - 1)
       pairs.each {|x, y| return false unless x.eval(env).send(op, y.eval(env))}
       true
     end
@@ -76,45 +78,59 @@ module LetGrammar
   end
 
   class ZeroCheck < Struct.new(:expressions)
-    def eval(env)
-      self.expressions.all? {|x| x.eval(env) == 0}
-    end
+    def eval(env); self.expressions.all? {|x| x.eval(env) == 0}; end
   end
 
   class IfExp < Struct.new(:test, :true_branch, :false_branch)
+    def eval(env)
+      self.test.eval(env) ? self.true_branch.eval(env) : self.false_branch.eval(env)
+    end
   end
 
   class Identifier < Struct.new(:value)
+    def eval(env); env[self.value]; end
   end
 
   class Assignment < Struct.new(:variable, :value)
+    # This is a little tricky but I'm going to go with an eager evaluation strategy.
+    # Might come back and re-think this in terms of lazy evaluation.
+    def eval(env); env[self.variable.value] = self.value.eval(env); end
   end
 
-  class LetExp < Struct.new(:binding, :body)
+  class LetExp < Struct.new(:assignments, :body)
+    def eval(env)
+      new_env = env.increment
+      assignments.each {|assignment| assignment.eval(new_env)}
+      self.body.eval(new_env)
+    end
   end
 
   class ListExp < Struct.new(:list)
+    def eval(env); self.list.map {|x| x.eval(env)}; end
   end
 
   class CarExp < Struct.new(:list)
+    def eval(env); self.list.eval(env).first; end
   end
 
   class CdrExp < Struct.new(:list)
+    def eval(env); self.list.eval(env)[1..-1]; end
   end
 
   class NullExp < Struct.new(:list)
+    def eval(env); self.list.eval(env).empty?; end
   end
 
   class ConsExp < Struct.new(:head, :tail)
+    def eval(env); [self.head.eval(env)] + self.tail.eval(env); end
   end
 
   class Condition < Struct.new(:left, :right)
+    def eval(env); self.left.eval(env) ? self.right.eval(env) : false; end
   end
 
   class CondExp < Struct.new(:conditions)
-  end
-
-  class LetExpression < Struct.new(:assignments, :body)
+    def eval(env); self.conditions.each {|x| if (val = x.eval(env)) then return val end}; end
   end
 
   class Procedure < Struct.new(:arguments, :body)
@@ -232,7 +248,7 @@ module LetGrammar
     let_expression = (m('let') > sep > cut! > assignment[:first] >
      (whitespace > one_of(',').ignore > cut! > whitespace > assignment).many.any[:rest] >
      sep > cut! > m('in') > sep > cut! > r(:expression)[:body] > cut!) >> ->(s) {
-      [LetExpression.new(s[:first] + s[:rest], s[:body][0])]
+      [LetExp.new(s[:first] + s[:rest], s[:body][0])]
     }
 
     # procedures, proc (var1 {, var}*) expression
