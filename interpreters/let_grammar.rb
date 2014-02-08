@@ -54,7 +54,7 @@ module LetGrammar
     # assumption holds.
     def eval(env, op)
       lazy_exprs = self.expressions.lazy
-      pairs = lazy_exprs.zip(lazy_exprs.drop(1)).take(self.expression.length - 1)
+      pairs = lazy_exprs.zip(lazy_exprs.drop(1)).take(self.expressions.length - 1)
       pairs.each {|x, y| return false unless x.eval(env).send(op, y.eval(env))}
       true
     end
@@ -134,9 +134,19 @@ module LetGrammar
   end
 
   class Procedure < Struct.new(:arguments, :body)
+    def eval(env)
+      lambda do |*args|
+        procedure_env = env.increment
+        self.arguments.zip(args).each {|arg, value| procedure_env[arg.value] = value}
+        self.body.eval(procedure_env)
+      end
+    end
   end
 
   class ProcedureCall < Struct.new(:operator, :operands)
+    def eval(env)
+      self.operator.eval(env).call(*self.operands.map {|x| x.eval(env)})
+    end
   end
 
   @grammar = Grammar.rules do
@@ -253,7 +263,7 @@ module LetGrammar
 
     # procedures, proc (var1 {, var}*) expression
     proc_expression = (m('proc') > cut! > whitespace > one_of('(') > identifier[:first] > cut! >
-     (whitespace > one_of(',') > whitespace > identifier).many.any[:rest] > one_of(')') > cut! > sep >
+     (whitespace > one_of(',').ignore > whitespace > identifier).many.any[:rest] > one_of(')') > cut! > sep >
      r(:expression)[:body]) >> ->(s) {
       [Procedure.new(s[:first] + s[:rest], s[:body][0])]
     }
@@ -275,4 +285,6 @@ module LetGrammar
 
   def self.parse(indexable); @grammar.parse(indexable); end
 
-end
+  def self.eval(indexable); @grammar.parse(indexable)[0].eval(Env.new({}, {})); end
+
+  end
