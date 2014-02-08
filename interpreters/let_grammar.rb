@@ -3,8 +3,7 @@ require 'pegrb'
 module LetGrammar
 
   # Environment class. Basically just chained hash maps modeling the usual
-  # lexical scope structure we all know and love. Not optimized at all for any
-  # kind of special access patterns.
+  # lexical scope structure we all know and love.
   class Env
     def initialize(inner, outer); @inner, @outer = inner, outer; end
     def [](val); @inner[val] || @outer[val]; end
@@ -17,9 +16,9 @@ module LetGrammar
     def eval(_); self.value; end
   end
 
-  # Common evaluation strategy so we abstract it.
+  # Common evaluation for arithmetic operations so we abstract it.
   class ArithmeticOp < Struct.new(:expressions)
-    # We again use lazy enumerators to not evaluate all the expressions. There might be
+    # We use lazy enumerators to not evaluate all the expressions. There might be
     # a type error along the way so evaluating all the expressions and then hitting a type
     # error is wasted effort. Evaluate only when necessary and die as soon as we have a type error.
     def eval(env, op)
@@ -29,7 +28,7 @@ module LetGrammar
     end
   end
 
-  # Just need the right symbol to evaluate.
+  # Delegate to +ArithmeticOp.eval+ with the proper operator symbol.
   class DiffExp < ArithmeticOp
     def eval(env); super(env, :-); end
   end
@@ -50,8 +49,6 @@ module LetGrammar
   class OrderOp < Struct.new(:expressions)
     # We use lazy enumerators for short circuiting the operations because we don't
     # need to evaluate all the expressions. We can bail as soon as we see a false result.
-    # We are assuming a finite collection of expressions and in the absence of macros this
-    # assumption holds.
     def eval(env, op)
       lazy_exprs = self.expressions.lazy
       pairs = lazy_exprs.zip(lazy_exprs.drop(1)).take(self.expressions.length - 1)
@@ -60,7 +57,7 @@ module LetGrammar
     end
   end
 
-  # Just need the right symbol to evaluate.
+  # Delegate to +OrderOp.eval+ with the right operator symbol.
   class LessExp < OrderOp
     def eval(env); super(env, :<); end
   end
