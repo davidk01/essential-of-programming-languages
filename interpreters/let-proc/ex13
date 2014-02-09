@@ -1,0 +1,2 @@
+let even = proc (x) if zero?(x) then 1 else (odd -(x, 1)), odd = proc (x) if zero?(x) then 0 else (even -(x, 1)) in
+  list((odd 13), (even 12), (even 11), (odd 12))
