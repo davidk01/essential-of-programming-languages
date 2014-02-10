@@ -1,0 +1,3 @@
+let g = let counter = newref(0) in
+  proc () begin setref(counter, +(deref(counter), 1)); deref(counter) end
+in let a = (g) in let b = (g) in -(a, b)

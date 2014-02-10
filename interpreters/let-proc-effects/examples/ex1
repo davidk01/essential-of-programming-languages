@@ -1,0 +1,4 @@
+let x = newref(0) in
+let even = proc () if zero?(deref(x)) then 1 else begin setref(x, -(deref(x), 1)); (odd) end,
+    odd = proc () if zero?(deref(x)) then 0 else begin setref(x, -(deref(x), 1)); (even) end in
+  begin setref(x, 13); (odd) end
