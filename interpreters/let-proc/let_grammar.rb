@@ -158,8 +158,8 @@ module LetGrammar
     sep = one_of(/\s/).many.ignore
 
     # any sequence of digits, e.g. 123
-    number = (one_of(/\d/).many[:digits] > cut!) >> ->(s) {
-      [ConstExp.new(s[:digits].map(&:text).join.to_i)]
+    number = (one_of('-').any[:sign] > one_of(/\d/).many[:digits] > cut!) >> ->(s) {
+      [ConstExp.new(s[:digits].map(&:text).join.to_i * (s[:sign][0] ? -1 : 1))]
     }
 
     # All order operators have a similar structure as well
