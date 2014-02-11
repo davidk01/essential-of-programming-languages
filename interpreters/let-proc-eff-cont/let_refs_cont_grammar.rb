@@ -25,8 +25,17 @@ module LetRefsGrammar
     def eval(_, _); self.value; end
   end
 
+  class SymbolEval < Struct.new(:expressions)
+    # Factor out the boilerplate for defining the delegation to eval.
+    def self.define_symbol_eval(method_symbol)
+      define_method(:eval) do |env, store|
+        super(env, store, method_symbol)
+      end
+    end
+  end
+
   # Common evaluation for arithmetic operations so we abstract it.
-  class ArithmeticOp < Struct.new(:expressions)
+  class ArithmeticOp < SymbolEval
     # We use lazy enumerators to not evaluate all the expressions. There might be
     # a type error along the way so evaluating all the expressions and then hitting a type
     # error is wasted effort. Evaluate only when necessary and die as soon as we have a type error.
@@ -38,24 +47,14 @@ module LetRefsGrammar
   end
 
   # Delegate to +ArithmeticOp.eval+ with the proper operator symbol.
-  class DiffExp < ArithmeticOp
-    def eval(env, store); super(env, store, :-); end
-  end
-  class AddExp < ArithmeticOp
-    def eval(env, store); super(env, store, :+); end
-  end
-  class MultExp < ArithmeticOp
-    def eval(env, store); super(env, store, :*); end
-  end
-  class DivExp < ArithmeticOp
-    def eval(env, store); super(env, store, :/); end
-  end
-  class ModExp < ArithmeticOp
-    def eval(env, store); super(env, store, :%); end
-  end
+  class DiffExp < ArithmeticOp; define_symbol_eval(:-); end
+  class AddExp < ArithmeticOp; define_symbol_eval(:+); end
+  class MultExp < ArithmeticOp; define_symbol_eval(:*); end
+  class DivExp < ArithmeticOp; define_symbol_eval(:/); end
+  class ModExp < ArithmeticOp; define_symbol_eval(:%); end
 
   # Similar kind of abstraction as for +ArithmeticOp+.
-  class OrderOp < Struct.new(:expressions)
+  class OrderOp < SymbolEval
     # We use lazy enumerators for short circuiting the operations because we don't
     # need to evaluate all the expressions. We can bail as soon as we see a false result.
     def eval(env, store, op)
@@ -67,21 +66,11 @@ module LetRefsGrammar
   end
 
   # Delegate to +OrderOp.eval+ with the right operator symbol.
-  class LessExp < OrderOp
-    def eval(env, store); super(env, store, :<); end
-  end
-  class LessEqExp < OrderOp
-    def eval(env, store); super(env, store, :<=); end
-  end
-  class EqExp < OrderOp
-    def eval(env, store); super(env, store, :==); end
-  end
-  class GreaterExp < OrderOp
-    def eval(env, store); super(env, store, :>); end
-  end
-  class GreaterEqExp < OrderOp
-    def eval(env, store); super(env, store, :>=); end
-  end
+  class LessExp < OrderOp; define_symbol_eval(:<); end
+  class LessEqExp < OrderOp; define_symbol_eval(:<=); end
+  class EqExp < OrderOp; define_symbol_eval(:==); end
+  class GreaterExp < OrderOp; define_symbol_eval(:>); end
+  class GreaterEqExp < OrderOp; define_symbol_eval(:>=); end
 
   class ZeroCheck < Struct.new(:expressions)
     def eval(env, store); self.expressions.all? {|x| x.eval(env, store) == 0}; end
