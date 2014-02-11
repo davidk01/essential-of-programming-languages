@@ -22,14 +22,14 @@ module LetRefsGrammar
 
   # AST classes.
   class ConstExp < Struct.new(:value)
-    def eval(_, _); self.value; end
+    def eval(_, _, cont); cont.call(self.value); end
   end
 
   class SymbolEval < Struct.new(:expressions)
     # Factor out the boilerplate for defining the delegation to eval.
     def self.define_symbol_eval(method_symbol)
-      define_method(:eval) do |env, store|
-        super(env, store, method_symbol)
+      define_method(:eval) do |env, store, cont|
+        super(env, store, cont, method_symbol)
       end
     end
   end
@@ -39,9 +39,9 @@ module LetRefsGrammar
     # We use lazy enumerators to not evaluate all the expressions. There might be
     # a type error along the way so evaluating all the expressions and then hitting a type
     # error is wasted effort. Evaluate only when necessary and die as soon as we have a type error.
-    def eval(env, store, op)
-      accumulator = self.expressions[0].eval(env, store)
-      self.expressions.lazy.drop(1).each {|x| accumulator = accumulator.send(op, x.eval(env, store))}
+    def eval(env, store, cont, op)
+      accumulator = self.expressions[0].eval(env, store, cont)
+      self.expressions.lazy.drop(1).each {|x| accumulator = accumulator.send(op, x.eval(env, store, cont))}
       accumulator
     end
   end
@@ -57,10 +57,10 @@ module LetRefsGrammar
   class OrderOp < SymbolEval
     # We use lazy enumerators for short circuiting the operations because we don't
     # need to evaluate all the expressions. We can bail as soon as we see a false result.
-    def eval(env, store, op)
+    def eval(env, store, cont, op)
       lazy_exprs = self.expressions.lazy
       pairs = lazy_exprs.zip(lazy_exprs.drop(1)).take(self.expressions.length - 1)
-      pairs.each {|x, y| return false unless x.eval(env, store).send(op, y.eval(env, store))}
+      pairs.each {|x, y| return false unless x.eval(env, store, cont).send(op, y.eval(env, store, cont))}
       true
     end
   end
@@ -73,55 +73,55 @@ module LetRefsGrammar
   class GreaterEqExp < OrderOp; define_symbol_eval(:>=); end
 
   class ZeroCheck < Struct.new(:expressions)
-    def eval(env, store); self.expressions.all? {|x| x.eval(env, store) == 0}; end
+    def eval(env, store, cont); self.expressions.all? {|x| x.eval(env, store, cont) == 0}; end
   end
 
   class IfExp < Struct.new(:test, :true_branch, :false_branch)
-    def eval(env, store)
-      self.test.eval(env, store) ? self.true_branch.eval(env, store) : self.false_branch.eval(env, store)
+    def eval(env, store, cont)
+      self.test.eval(env, store, cont) ? self.true_branch.eval(env, store, cont) : self.false_branch.eval(env, store, cont)
     end
   end
 
   class Identifier < Struct.new(:value)
-    def eval(env, _); env[self.value]; end
+    def eval(env, _, cont); cont.call(env[self.value]); end
   end
 
   class Assignment < Struct.new(:variable, :value)
     # This is a little tricky but I'm going to go with an eager evaluation strategy.
     # Might come back and re-think this in terms of lazy evaluation.
-    def eval(env, store); env[self.variable.value] = self.value.eval(env, store); end
+    def eval(env, store, cont); cont.call(env[self.variable.value] = self.value.eval(env, store, cont)); end
   end
 
   class LetExp < Struct.new(:assignments, :body)
-    def eval(env, store)
+    def eval(env, store, cont)
       new_env = env.increment
-      assignments.each {|assignment| assignment.eval(new_env, store)}
-      self.body.eval(new_env, store)
+      assignments.each {|assignment| assignment.eval(new_env, store, cont)}
+      cont.call(self.body.eval(new_env, store, cont))
     end
   end
 
   class ListExp < Struct.new(:list)
-    def eval(env, store); self.list.map {|x| x.eval(env, store)}; end
+    def eval(env, store, cont); cont.call(self.list.map {|x| x.eval(env, store, cont)}); end
   end
 
   class CarExp < Struct.new(:list)
-    def eval(env, store); self.list.eval(env, store).first; end
+    def eval(env, store, cont); cont.call(self.list.eval(env, store, cont).first); end
   end
 
   class CdrExp < Struct.new(:list)
-    def eval(env, store); self.list.eval(env, store)[1..-1]; end
+    def eval(env, store, cont); cont.call(self.list.eval(env, store, cont)[1..-1]); end
   end
 
   class NullExp < Struct.new(:list)
-    def eval(env, store); self.list.eval(env, store).empty?; end
+    def eval(env, store, cont); cont.call(self.list.eval(env, store, cont).empty?); end
   end
 
   class ConsExp < Struct.new(:head, :tail)
-    def eval(env, store); [self.head.eval(env, store)] + self.tail.eval(env, store); end
+    def eval(env, store, cont); cont.call([self.head.eval(env, store, cont)] + self.tail.eval(env, store, cont)); end
   end
 
   class Condition < Struct.new(:left, :right)
-    def eval(env, store); self.left.eval(env, store) ? self.right.eval(env, store) : false; end
+    def eval(env, store, cont); cont.call(self.left.eval(env, store, cont) ? self.right.eval(env, store, cont) : false); end
   end
 
   class CondExp < Struct.new(:conditions)
