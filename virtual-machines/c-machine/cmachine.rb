@@ -1,4 +1,4 @@
-require File.expand_path(File.dirname(__FILE__) + '/c_machine_stack')
+require File.expand_path(File.dirname(__FILE__) + '/cmachinestack')
 
 # The actual virtual machine class.
 class CMachine

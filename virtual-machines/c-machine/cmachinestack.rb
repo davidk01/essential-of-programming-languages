@@ -1,4 +1,4 @@
-# We need to keep track of the top of the stack (not sure why?) so
+# We need to keep track of the top of the stack so
 # encapsulate that logic in one place to make sure the invariant is enforced.
 class Stack < Struct.new(:store, :sp)
   def initialize
