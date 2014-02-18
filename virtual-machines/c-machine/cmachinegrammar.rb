@@ -28,14 +28,19 @@ module CMachineGrammar
   class Switch < Struct.new(:test, :cases, :default); end
   class StatementBlock < Struct.new(:statements); end 
   class Statements < Struct.new(:statements); end
+  class IntType < Struct.new(:type); end
+  class DerivedType < Struct.new(:type); end
+  class PtrType < Struct.new(:type); end
+  class ArrayType < Struct.new(:type, :count); end
+  class VariableDeclaration < Struct.new(:type, :variable); end
 
   @grammar = Grammar.rules do
 
     # There is a common structure to expression of the form {op}(expr {, expr}+) so we
     # can map "op" to a class as soon as we see it.
     operator_class_mapping = {'-' => DiffExp, '+' => AddExp, '*' => MultExp, '/' => DivExp,
-        '<' => LessExp, '<=' => LessEqExp, '=' => EqExp, '>' => GreaterExp, '>=' => GreaterEqExp,
-        'not' => NotExp, 'neg' => NegExp
+     '<' => LessExp, '<=' => LessEqExp, '=' => EqExp, '>' => GreaterExp, '>=' => GreaterEqExp,
+     'not' => NotExp, 'neg' => NegExp
     }
 
     ws, sep = one_of(/\s/).many.any.ignore, one_of(/\s/).many.ignore
@@ -44,7 +49,7 @@ module CMachineGrammar
       [ConstExp.new(s[:digits].map(&:text).join.to_i)]
     }
 
-    identifier = one_of(/[^\s\(\)\,;<{}]/).many[:chars] >> ->(s) {
+    identifier = one_of(/[^\s\(\)\,;<{}\.]/).many[:chars] >> ->(s) {
       [Identifier.new(s[:chars].map(&:text).join)]
     }
 
@@ -75,14 +80,14 @@ module CMachineGrammar
     }
 
     # x <- expression
-    assignment = (identifier[:var] > sep > m('<-') > cut! > ws >
+    var_assignment = (identifier[:var] > ws > m('<-') > cut! > ws >
      r(:expression)[:expr]) >> ->(s) {
       [Assignment.new(s[:var][0], s[:expr][0])]
     }
     
     # { s* }
     statement_block = (one_of('{') > cut! > (ws > r(:statement)).many.any[:statements] >
-     one_of('}') > cut!) >> ->(s) {
+     ws > one_of('}') > cut!) >> ->(s) {
       [StatementBlock.new(s[:statements])]
     }
 
@@ -116,26 +121,48 @@ module CMachineGrammar
     # switch (e) { case 0: { s+ } case 1: { s+ } ... default: { s+ } }
     switch_statement = (m('switch') > cut! > ws > one_of('(') > ws > r(:expression)[:test] > ws >
      one_of(')') > ws > one_of('{') > (ws > case_fragment).many[:cases] > ws >
-     m('default:') > ws > statement_block[:default]) >> ->(s) {
+     m('default:') > cut! > ws > statement_block[:default]) >> ->(s) {
       [Switch.new(s[:test][0], s[:cases], s[:default][0])]
     }
 
-    #
-    rule :statement, if_statement | while_statement | for_statement | switch_statement |
-     (r(:expression) > one_of(';').ignore) | statement_block
-
-    statement_block = (one_of('{') > cut! > (sep > r(:statement)).many.any[:statements] >
-     one_of('}')) >> ->(s) {
-      [StatementBlock.new(s[:statements])]
+    # int or name of a declared type
+    basic_type = (m('int')[:int] | identifier[:derived]) >> ->(s) {
+      [s[:int] ? IntType.new('int') : DerivedType.new(s[:derived][0])]
     }
 
+    # pointer type
+    ptr_type = (m('ptr(') > cut! > ws > r(:type_expression)[:type] > ws > one_of(')') >
+     cut!) >> ->(s) {
+      [PtrType.new(s[:type][0])]
+    }
+
+    # array type
+    array_type = (m('array(') > cut! > ws > r(:type_expression)[:type] > ws > one_of(',') >
+     ws > number[:count] > ws > one_of(')')) >> ->(s) {
+      [ArrayType.new(s[:type][0], s[:count][0])]
+    }
+
+    # general type expression
+    rule :type_expression, ptr_type | array_type | basic_type
+
+    # type variable;
+    variable_declaration = (r(:type_expression)[:type] > sep > identifier[:variable] >
+     ws > one_of(';')) >> ->(s) {
+      [VariableDeclaration.new(s[:type][0], s[:variable][0])]
+    }
+
+    # all the statements
+    rule :statement, if_statement | while_statement | for_statement | switch_statement |
+     variable_declaration | (r(:expression) > one_of(';').ignore) | statement_block
+
     # expr; {expr;}*
-    rule :statements, (r(:statement)[:first] > (sep > r(:statement)).many.any[:rest]) >> ->(s) {
+    rule :statements, (r(:statement)[:first] > (ws > r(:statement)).many.any[:rest]) >> ->(s) {
       [Statements.new(s[:first] + s[:rest])]
     }
     
     # all the expressions
-    rule :expression, arithmetic_expression | unary_expression | assignment | number | identifier
+    rule :expression, arithmetic_expression | unary_expression | var_assignment | number |
+     identifier
 
     rule :start, r(:statements)
 
