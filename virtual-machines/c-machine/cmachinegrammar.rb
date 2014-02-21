@@ -28,7 +28,9 @@ module CMachineGrammar
   class Switch < Struct.new(:test, :cases, :default); end
   class StatementBlock < Struct.new(:statements); end 
   class Statements < Struct.new(:statements); end
-  class IntType < Struct.new(:type); end
+  class IntType; end
+  class FloatType; end
+  class BoolType; end
   class DerivedType < Struct.new(:type); end
   class PtrType < Struct.new(:type); end
   class ArrayType < Struct.new(:type, :count); end
@@ -126,8 +128,19 @@ module CMachineGrammar
     }
 
     # int or name of a declared type
-    basic_type = (m('int')[:int] | identifier[:derived]) >> ->(s) {
-      [s[:int] ? IntType.new('int') : DerivedType.new(s[:derived][0])]
+    basic_type = ((m('int') | m('float') | m('bool'))[:basic] | identifier[:derived]) >> ->(s) {
+      [if s[:basic]
+        case s[:basic].map(&:text).join
+        when 'int'
+          IntType
+        when 'float'
+          FloatType
+        when 'bool'
+          BoolType
+        end
+      else
+        DerivedType.new(s[:derived][0])
+      end]
     }
 
     # pointer type
@@ -145,7 +158,7 @@ module CMachineGrammar
     # general type expression
     rule :type_expression, ptr_type | array_type | basic_type
 
-    # type variable;
+    # type variable; (force initialization to happen later for now)
     variable_declaration = (r(:type_expression)[:type] > sep > identifier[:variable] >
      ws > one_of(';')) >> ->(s) {
       [VariableDeclaration.new(s[:type][0], s[:variable][0])]
