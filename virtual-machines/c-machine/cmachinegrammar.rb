@@ -1,40 +1,11 @@
 require 'pegrb'
+require './ast'
 
 # The grammar that describes the subset of C we are going to work with.
 # I have taken some liberties with how arithmetic operations are defined
 # because I don't want to worry about precedence. So all arithmetic operations
 # are written prefix/function style, e.g. {+, -, *}(x, y, z, -(1, 2, 3)).
 module CMachineGrammar
-
-  # AST classes
-  class Identifier < Struct.new(:value); end
-  class ConstExp < Struct.new(:value); end
-  class DiffExp < Struct.new(:expressions); end
-  class AddExp < Struct.new(:expressions); end
-  class MultExp < Struct.new(:expressions); end
-  class DivExp < Struct.new(:expressions); end
-  class LessExp < Struct.new(:expressions); end
-  class LessEqExp < Struct.new(:expressions); end
-  class EqExp < Struct.new(:expressions); end
-  class GreaterExp < Struct.new(:expressions); end
-  class GreaterEqExp < Struct.new(:expressions); end
-  class NotExp < Struct.new(:expression); end
-  class NegExp < Struct.new(:expression); end
-  class Assignment < Struct.new(:left, :right); end
-  class If < Struct.new(:test, :true_branch, :false_branch); end
-  class While < Struct.new(:test, :body); end
-  class For < Struct.new(:init, :test, :update, :body); end
-  class CaseFragment < Struct.new(:case, :body); end
-  class Switch < Struct.new(:test, :cases, :default); end
-  class StatementBlock < Struct.new(:statements); end 
-  class Statements < Struct.new(:statements); end
-  class IntType; end
-  class FloatType; end
-  class BoolType; end
-  class DerivedType < Struct.new(:type); end
-  class PtrType < Struct.new(:type); end
-  class ArrayType < Struct.new(:type, :count); end
-  class VariableDeclaration < Struct.new(:type, :variable); end
 
   @grammar = Grammar.rules do
 
@@ -51,7 +22,7 @@ module CMachineGrammar
       [ConstExp.new(s[:digits].map(&:text).join.to_i)]
     }
 
-    identifier = one_of(/[^\s\(\)\,;<{}\.]/).many[:chars] >> ->(s) {
+    identifier = one_of(/[^\s\(\)\,;<{}\.\->]/).many[:chars] >> ->(s) {
       [Identifier.new(s[:chars].map(&:text).join)]
     }
 
@@ -83,7 +54,7 @@ module CMachineGrammar
 
     # x <- expression
     var_assignment = (identifier[:var] > ws > m('<-') > cut! > ws >
-     r(:expression)[:expr]) >> ->(s) {
+     r(:expression)[:expr] > ws > one_of(';')) >> ->(s) {
       [Assignment.new(s[:var][0], s[:expr][0])]
     }
     
@@ -159,14 +130,36 @@ module CMachineGrammar
     rule :type_expression, ptr_type | array_type | basic_type
 
     # type variable; (force initialization to happen later for now)
-    variable_declaration = (r(:type_expression)[:type] > sep > identifier[:variable] >
-     ws > one_of(';')) >> ->(s) {
-      [VariableDeclaration.new(s[:type][0], s[:variable][0])]
+    variable_declaration = (r(:type_expression)[:type] > ws > identifier[:variable] >
+     ws > (one_of('=').ignore > cut! > ws > r(:expression)).any[:value] > one_of(';')) >> ->(s) {
+      [VariableDeclaration.new(s[:type][0], s[:variable][0], s[:value][0])]
+    }
+    
+    # function definition
+    function_definition_argument = (r(:type_expression)[:type] > sep > identifier[:name]) >> ->(s) {
+      [ArgumentDefinition.new(s[:type][0], s[:name][0])]
+    }
+
+    function_arguments = (function_definition_argument[:first] > (ws >
+     one_of(',').ignore > cut! > function_definition_argument).many.any[:rest]) >> ->(s) {
+      s[:first] + s[:rest]
+    }
+     
+    function_definition = (r(:type_expression)[:return_type] > sep > identifier[:function_name] >
+     ws > one_of('(') > cut! > function_arguments.any[:arguments] > one_of(')') > cut! > ws >
+     statement_block[:function_body]) >> ->(s) {
+      [FunctionDefinition.new(s[:return_type][0], s[:arguments], s[:function_body][0])]
+    }
+
+    # return statement
+    return_statement = (m('return') > sep > r(:expression)[:return] > ws > one_of(';')) >> ->(s) {
+      [ReturnStatement.new(s[:return][0])]
     }
 
     # all the statements
-    rule :statement, if_statement | while_statement | for_statement | switch_statement |
-     variable_declaration | (r(:expression) > one_of(';').ignore) | statement_block
+    rule :statement, function_definition | return_statement | if_statement | while_statement | 
+     for_statement | switch_statement | variable_declaration | return_statement | var_assignment |
+     (r(:expression) > one_of(';').ignore) | statement_block
 
     # expr; {expr;}*
     rule :statements, (r(:statement)[:first] > (ws > r(:statement)).many.any[:rest]) >> ->(s) {
@@ -174,8 +167,7 @@ module CMachineGrammar
     }
     
     # all the expressions
-    rule :expression, arithmetic_expression | unary_expression | var_assignment | number |
-     identifier
+    rule :expression, arithmetic_expression | unary_expression | number | identifier
 
     rule :start, r(:statements)
 
