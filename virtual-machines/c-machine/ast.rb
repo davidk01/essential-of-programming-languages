@@ -29,8 +29,9 @@ module CMachineGrammar
   class PtrType < Struct.new(:type); end
   class ArrayType < Struct.new(:type, :count); end
   class VariableDeclaration < Struct.new(:type, :variable, :value); end
-  class FunctionDefinition < Struct.new(:return_type, :arguments, :body); end
+  class FunctionDefinition < Struct.new(:return_type, :name, :arguments, :body); end
   class ArgumentDefinition < Struct.new(:type, :name); end
   class ReturnStatement < Struct.new(:return); end
+  class FunctionCall < Struct.new(:name, :arguments); end
 
 end

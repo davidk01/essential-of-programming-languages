@@ -52,8 +52,8 @@ module CMachineGrammar
       [s[:op][0].new(s[:first] + s[:rest])]
     }
 
-    # x <- expression
-    var_assignment = (identifier[:var] > ws > m('<-') > cut! > ws >
+    # x = expression
+    var_assignment = (identifier[:var] > ws > m('=') > cut! > ws >
      r(:expression)[:expr] > ws > one_of(';')) >> ->(s) {
       [Assignment.new(s[:var][0], s[:expr][0])]
     }
@@ -79,9 +79,9 @@ module CMachineGrammar
     }
 
     # for (e1; e2; e3) { s+ }
-    for_statement = (m('for') > cut! > ws > one_of('(') > cut! > ws > r(:expression)[:init] >
-     one_of(';') > cut! > ws > r(:expression)[:test] > one_of(';') > cut! > ws >
-     r(:expression)[:update] > ws > one_of(')') > ws > statement_block[:body]) >> ->(s) {
+    for_statement = (m('for') > cut! > ws > one_of('(') > cut! > ws > r(:statement)[:init] >
+     cut! > ws > r(:statement)[:test] > cut! > ws >
+     r(:statement)[:update] > ws > one_of(')') > ws > statement_block[:body]) >> ->(s) {
       [For.new(s[:init][0], s[:test][0], s[:update][0], s[:body][0])]
     }
 
@@ -115,13 +115,12 @@ module CMachineGrammar
     }
 
     # pointer type
-    ptr_type = (m('ptr(') > cut! > ws > r(:type_expression)[:type] > ws > one_of(')') >
-     cut!) >> ->(s) {
+    ptr_type = (m('ptr(') > ws > r(:type_expression)[:type] > ws > one_of(')')) >> ->(s) {
       [PtrType.new(s[:type][0])]
     }
 
     # array type
-    array_type = (m('array(') > cut! > ws > r(:type_expression)[:type] > ws > one_of(',') >
+    array_type = (m('array(') > ws > r(:type_expression)[:type] > ws > one_of(',') >
      ws > number[:count] > ws > one_of(')')) >> ->(s) {
       [ArrayType.new(s[:type][0], s[:count][0])]
     }
@@ -146,9 +145,21 @@ module CMachineGrammar
     }
      
     function_definition = (r(:type_expression)[:return_type] > sep > identifier[:function_name] >
-     ws > one_of('(') > cut! > function_arguments.any[:arguments] > one_of(')') > cut! > ws >
-     statement_block[:function_body]) >> ->(s) {
-      [FunctionDefinition.new(s[:return_type][0], s[:arguments], s[:function_body][0])]
+     ws > one_of('(') > function_arguments.any[:arguments] > one_of(')') > ws >
+     statement_block[:function_body] > cut!) >> ->(s) {
+      [FunctionDefinition.new(s[:return_type][0], s[:function_name][0],
+       s[:arguments], s[:function_body][0])]
+    }
+
+    # function call
+    function_call_arguments = (r(:expression)[:first] > (ws > one_of(',').ignore > cut! >
+     r(:expression)).many.any[:rest]) >> ->(s) {
+      s[:first] + s[:rest]
+    }
+
+    function_call = (identifier[:function_name] > ws > one_of('(') > ws >
+     function_call_arguments.any[:arguments] > ws > one_of(')') > cut!) >> ->(s) {
+      [FunctionCall.new(s[:function_name][0], s[:arguments])]
     }
 
     # return statement
@@ -167,7 +178,8 @@ module CMachineGrammar
     }
     
     # all the expressions
-    rule :expression, arithmetic_expression | unary_expression | number | identifier
+    rule :expression, arithmetic_expression | unary_expression | number | function_call |
+     identifier
 
     rule :start, r(:statements)
 
