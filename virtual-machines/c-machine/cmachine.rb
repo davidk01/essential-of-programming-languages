@@ -21,6 +21,7 @@ class CMachine
   # Instruction dispatcher.
   def execute
     case (sym = @ir.instruction)
+    when :label
     when :pop
       @ir.arguments[0].times { @stack.pop }
     when :loadc

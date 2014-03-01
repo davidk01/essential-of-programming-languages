@@ -18,28 +18,35 @@ module CMachineGrammar
 
     ws, sep = one_of(/\s/).many.any.ignore, one_of(/\s/).many.ignore
 
+    # just integers for the time being
     number = one_of(/\d/).many[:digits] >> ->(s) {
       [ConstExp.new(s[:digits].map(&:text).join.to_i)]
     }
 
-    identifier = one_of(/[^\s\(\)\,;<{}\.\->]/).many[:chars] >> ->(s) {
+    # careful with punctuation
+    identifier = one_of(/[^\s\(\),;<{}\.\->]/).many[:chars] >> ->(s) {
       [Identifier.new(s[:chars].map(&:text).join)]
     }
 
+    # <=, <, =, >, >=
     order_operator = ((m('<=') | m('>=') | one_of('<', '=', '>'))[:operator] > cut!) >> ->(s) {
       [operator_class_mapping[s[:operator].map(&:text).join]]
     }
 
+    # -, +, *, /
     arithmetic_operator = (one_of('-', '+', '*', '/')[:operator] > cut!) >> ->(s) {
       [operator_class_mapping[s[:operator][0].text]]
     }
 
+    # comparison or arithmetic operator
     general_arithmetic_operator = order_operator | arithmetic_operator
 
+    # negation and boolean not
     unary_operator = (m('not') | m('neg'))[:op] >> ->(s) {
       [operator_class_mapping[s[:op].map(&:text).join]]
     }
 
+    # {not, neg}(expr)
     unary_expression = (unary_operator[:op] > one_of('(') > cut! > ws >
         r(:expression)[:expression] > ws > one_of(')') > cut!) >> ->(s) {
       [s[:op][0].new(s[:expression][0])]
@@ -52,7 +59,7 @@ module CMachineGrammar
       [s[:op][0].new(s[:first] + s[:rest])]
     }
 
-    # x = expression
+    # x = expression (statement)
     var_assignment = (identifier[:var] > ws > m('=') > cut! > ws >
      r(:expression)[:expr] > ws > one_of(';')) >> ->(s) {
       [Assignment.new(s[:var][0], s[:expr][0])]
@@ -98,7 +105,7 @@ module CMachineGrammar
       [Switch.new(s[:test][0], s[:cases], s[:default][0])]
     }
 
-    # int or name of a declared type
+    # int or name of a declared type (not an expression or a statement)
     basic_type = ((m('int') | m('float') | m('bool'))[:basic] | identifier[:derived]) >> ->(s) {
       [if s[:basic]
         case s[:basic].map(&:text).join
@@ -125,25 +132,29 @@ module CMachineGrammar
       [ArrayType.new(s[:type][0], s[:count][0])]
     }
 
-    # general type expression
+    # type expression
     rule :type_expression, ptr_type | array_type | basic_type
 
-    # type variable; (force initialization to happen later for now)
+    # typed variable declaration along with optional assignment (statement)
     variable_declaration = (r(:type_expression)[:type] > ws > identifier[:variable] >
      ws > (one_of('=').ignore > cut! > ws > r(:expression)).any[:value] > one_of(';')) >> ->(s) {
       [VariableDeclaration.new(s[:type][0], s[:variable][0], s[:value][0])]
     }
     
-    # function definition
+    # function definition components
+
+    # type variable_name
     function_definition_argument = (r(:type_expression)[:type] > sep > identifier[:name]) >> ->(s) {
       [ArgumentDefinition.new(s[:type][0], s[:name][0])]
     }
 
+    # type var1 {, type var2}*
     function_arguments = (function_definition_argument[:first] > (ws >
      one_of(',').ignore > cut! > function_definition_argument).many.any[:rest]) >> ->(s) {
       s[:first] + s[:rest]
     }
-     
+
+    # return_type function_name({type arg}*) { statments* } (statement)
     function_definition = (r(:type_expression)[:return_type] > sep > identifier[:function_name] >
      ws > one_of('(') > function_arguments.any[:arguments] > one_of(')') > ws >
      statement_block[:function_body] > cut!) >> ->(s) {
@@ -151,12 +162,15 @@ module CMachineGrammar
        s[:arguments], s[:function_body][0])]
     }
 
-    # function call
+    # function call components
+
+    # arguments {expr,}*
     function_call_arguments = (r(:expression)[:first] > (ws > one_of(',').ignore > cut! >
      r(:expression)).many.any[:rest]) >> ->(s) {
       s[:first] + s[:rest]
     }
 
+    # function_name({expressions}*)
     function_call = (identifier[:function_name] > ws > one_of('(') > ws >
      function_call_arguments.any[:arguments] > ws > one_of(')') > cut!) >> ->(s) {
       [FunctionCall.new(s[:function_name][0], s[:arguments])]
@@ -169,7 +183,7 @@ module CMachineGrammar
 
     # all the statements
     rule :statement, function_definition | return_statement | if_statement | while_statement | 
-     for_statement | switch_statement | variable_declaration | return_statement | var_assignment |
+     for_statement | switch_statement | variable_declaration | var_assignment |
      (r(:expression) > one_of(';').ignore) | statement_block
 
     # expr; {expr;}*
