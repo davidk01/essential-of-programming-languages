@@ -25,6 +25,8 @@ module CMachineGrammar
   class IntType; end
   class FloatType; end
   class BoolType; end
+  class StructMember < Struct.new(:type, :name); end
+  class StructDeclaration < Struct.new(:name, :members); end
   class DerivedType < Struct.new(:type); end
   class PtrType < Struct.new(:type); end
   class ArrayType < Struct.new(:type, :count); end

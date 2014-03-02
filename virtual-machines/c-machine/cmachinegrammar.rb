@@ -59,7 +59,7 @@ module CMachineGrammar
       [s[:op][0].new(s[:first] + s[:rest])]
     }
 
-    # x = expression (statement)
+    # x = expression; (statement)
     var_assignment = (identifier[:var] > ws > m('=') > cut! > ws >
      r(:expression)[:expr] > ws > one_of(';')) >> ->(s) {
       [Assignment.new(s[:var][0], s[:expr][0])]
@@ -104,6 +104,9 @@ module CMachineGrammar
      m('default:') > cut! > ws > statement_block[:default]) >> ->(s) {
       [Switch.new(s[:test][0], s[:cases], s[:default][0])]
     }
+
+    # ;
+    empty_statement = ws > one_of(';').ignore
 
     # int or name of a declared type (not an expression or a statement)
     basic_type = ((m('int') | m('float') | m('bool'))[:basic] | identifier[:derived]) >> ->(s) {
@@ -181,10 +184,22 @@ module CMachineGrammar
       [ReturnStatement.new(s[:return][0])]
     }
 
+    # struct member : {type var;}
+    struct_member = (r(:type_expression)[:type] > sep > identifier[:name] >
+     ws > one_of(';')) >> ->(s) {
+      [StructMember.new(s[:type][0], s[:name][0])]
+    }
+
+    # struct name { {type var;}+ }
+    struct_declaration = (m('struct') > cut! > sep > identifier[:name] > ws > one_of('{') >
+     ws > (struct_member > ws > cut!).many[:members] > ws > one_of('}')) >> ->(s) {
+      [StructDeclaration.new(s[:name][0], s[:members])]
+    }
+
     # all the statements
     rule :statement, function_definition | return_statement | if_statement | while_statement | 
-     for_statement | switch_statement | variable_declaration | var_assignment |
-     (r(:expression) > one_of(';').ignore) | statement_block
+     for_statement | switch_statement | variable_declaration | struct_declaration | var_assignment |
+     (r(:expression) > one_of(';').ignore) | statement_block | empty_statement
 
     # expr; {expr;}*
     rule :statements, (r(:statement)[:first] > (ws > r(:statement)).many.any[:rest]) >> ->(s) {
