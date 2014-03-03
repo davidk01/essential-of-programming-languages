@@ -3,9 +3,27 @@ require File.expand_path(File.dirname(__FILE__) + '/cmachinestack')
 # The actual virtual machine class.
 class CMachine
 
+  # Need a convenient way to see all the instructions. Simple comment for the time being
+  # :label l
+  # :pop
+  # :loadc c
+  # :load c
+  # :store c
+  # :loada s c
+  # :storea s c
+  # :jump a
+  # :jumpz a
+  # :jumpi a
+  # :dup
+  # :*, :/, :+, :-, :%
+  # :==, :!=, :<, :<=, :>, :>=
+  # :-@, :!
+
   # An instruction is just a symbol along with any necessary arguments.
   # E.g. +Instruction.new(:loadc, [1])+
-  class Instruction < Struct.new(:instruction, :arguments); end
+  class Instruction < Struct.new(:instruction, :arguments)
+    def self.[](instruction, arguments); [new(instruction, arguments)]; end
+  end
 
   # Set up the initial stack and registers.
   def initialize(c)
