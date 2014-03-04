@@ -22,7 +22,7 @@ class CMachine
   # An instruction is just a symbol along with any necessary arguments.
   # E.g. +Instruction.new(:loadc, [1])+
   class Instruction < Struct.new(:instruction, :arguments)
-    def self.[](instruction, arguments); [new(instruction, arguments)]; end
+    def self.[](instruction, *arguments); [new(instruction, arguments)]; end
   end
 
   # Set up the initial stack and registers.

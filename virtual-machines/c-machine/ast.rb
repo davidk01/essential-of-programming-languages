@@ -3,6 +3,8 @@ I = CMachine::Instruction
 
 module CMachineGrammar
 
+  class CompileData < Struct.new(:labels, :variables, :types); end
+
   # AST classes
   class Identifier < Struct.new(:value); end
 
@@ -40,11 +42,11 @@ module CMachineGrammar
     # during a post-processing step. The labels themselves stay in the code but the VM
     # interprets them as no-ops.
 
-    def compile(labels, variables, types)
-      else_target, end_target = labels.get_label, labels.get_label
-      self.test.compile(labels, variables, types) + I[:jumpz, [else_target]] +
-       self.true_branch.compile(labels, variables, types) + I[:jump, [end_target]] + I[:label, [else_target]] +
-       self.false_branch.compile(labels, variables, types) + I[:label, [end_target]]
+    def compile(compile_data)
+      else_target, end_target = compile_data.get_label, compile_data.get_label
+      self.test.compile(compile_data) + I[:jumpz, else_target] +
+       self.true_branch.compile(compile_data) + I[:jump, end_target] + I[:label, else_target] +
+       self.false_branch.compile(compile_data) + I[:label, end_target]
     end
 
   end
@@ -56,15 +58,29 @@ module CMachineGrammar
     # Pretty similar to how we compile "if" statements. We have some jump targets and a test
     # to figure out where to jump.
 
-    def compile(labels, variables, types)
-      test_target, end_target = labels.get_label, labels.get_label
-      I[:label, [test_target]] + self.test.compile(labels, variables, types) + I[:jumpz, [end_target]] +
-       self.body.compile(labels, variables, types) + I[:jump, [test_target]]
+    def compile(compile_data)
+      test_target, end_target = compile_data.get_label, compile_data.get_label
+      I[:label, test_target] + self.test.compile(compile_data) + I[:jumpz, end_target] +
+       self.body.compile(compile_data) + I[:jump, test_target]
     end
 
   end
 
-  class For < Struct.new(:init, :test, :update, :body); end
+  class For < Struct.new(:init, :test, :update, :body)
+
+    ##
+    # For loop for(e1;e2;e3;) { s } is equivalent to e1; while (e2) { s; e3; } so we compile it as
+    # init [:test] test jumpz(:end) body update jump(:test) [:end]
+    # A bit twisty but manageable.
+
+    def compile(compile_data)
+      test_target, end_target = compile_data.get_label, compile_data.get_label
+      self.init.compile(compile_data) + I[:label, test_target] +
+       self.test.compile(compile_data) + I[:jumpz, end_target] +
+       self.body.compile(compile_data) + I[:jump, test_target] + I[:label, end_target]
+    end
+
+  end
 
   class CaseFragment < Struct.new(:case, :body); end
 
