@@ -13,7 +13,8 @@ module CMachineGrammar
     # e.g. :+, :-, :/, :*
 
     def reduce_with_operation(compile_data, operation)
-      self.expressions.map {|e| e.compile(compile_data)}.reduce(&:+) + I[operation] * (self.expressions.length - 1)
+      expr = self.expressions.map {|e| e.compile(compile_data)}
+      expr[0] + expr[1..-1].map {|e| e + I[operation]}.flatten
     end
 
     ##
