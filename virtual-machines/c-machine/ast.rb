@@ -3,34 +3,142 @@ I = CMachine::Instruction
 
 module CMachineGrammar
 
+  module OpReducers
+
+    def reduce_with_operation(compile_data, operation)
+      self.expressions.map {|e| e.compile(compile_data)}.reduce(&:+) + I[operation] * (self.expressions.length - 1)
+    end
+
+    def reduce_with_comparison(compile_data, comparison)
+      exprs = self.expressions.map {|e| e.compile(compile_data)}
+      comparisons = exprs[0...-1].zip(exprs[1..-1]).map {|a, b| a + b + I[comparison]}.reduce(&:+)
+      comparisons + I[:&] * (self.expressions.length - 2)
+    end
+
+  end
+
   class CompileData < Struct.new(:labels, :variables, :types); end
 
   # AST classes
   class Identifier < Struct.new(:value); end
 
-  class ConstExp < Struct.new(:value); end
+  class ConstExp < Struct.new(:value)
 
-  class DiffExp < Struct.new(:expressions); end
+    ##
+    # Just load the constant.
+    # :loadc self.value
 
-  class AddExp < Struct.new(:expressions); end
+    def compile(_); I[:loadc, self.value]; end
 
-  class MultExp < Struct.new(:expressions); end
+  end
 
-  class DivExp < Struct.new(:expressions); end
+  class DiffExp < Struct.new(:expressions)
+    include OpReducers
 
-  class LessExp < Struct.new(:expressions); end
+    ##
+    # For each expression in the list of expressions we compile it and then we append n - 1 :- operations,
+    # where n is the length of the expressions. e1 e2 e3 ... en :- :- ... :-.
 
-  class LessEqExp < Struct.new(:expressions); end
+    def compile(compile_data); reduce_with_operation(compile_data, :-); end
 
-  class EqExp < Struct.new(:expressions); end
+  end
 
-  class GreaterExp < Struct.new(:expressions); end
+  class AddExp < Struct.new(:expressions)
+    include OpReducers
 
-  class GreaterEqExp < Struct.new(:expressions); end
+    ##
+    # Same reasoning as for +DiffExp+ except we use :+.
 
-  class NotExp < Struct.new(:expression); end
+    def compile(compile_data); reduce_with_operation(compile_data, :+); end
 
-  class NegExp < Struct.new(:expression); end
+  end
+
+  class MultExp < Struct.new(:expressions)
+    include OpReducers
+
+    ##
+    # Same as above.
+
+    def compile(compile_data); reduce_with_operation(compile_data, :*); end
+
+  end
+
+  class DivExp < Struct.new(:expressions)
+    include OpReducers
+
+    # Same as above.
+
+    def compile(compile_data); reduce_with_operation(compile_data, :/); end
+
+  end
+
+  class LessExp < Struct.new(:expressions)
+    include OpReducers
+
+    ##
+    # e1 e2 :< e2 e3 :< e3 e4 :< ... en-1 en :< :& :& ... :&
+
+    def compile(compile_data); reduce_with_comparison(compile_data, :<); end
+
+  end
+
+  class LessEqExp < Struct.new(:expressions)
+    include OpReducers
+
+    ##
+    # Same as above.
+
+    def compile(compile_data); reduce_with_comparison(compile_data, :<=); end
+
+  end
+
+  class EqExp < Struct.new(:expressions)
+    include OpReducers
+
+    ##
+    # Same as above.
+
+    def compile(compile_data); reduce_with_comparison(compile_data, :==); end
+
+  end
+
+  class GreaterExp < Struct.new(:expressions)
+    include OpReducers
+
+    ##
+    # Same as above.
+
+    def compile(compile_data); reduce_with_comparison(compile_data, :>); end
+
+  end
+
+  class GreaterEqExp < Struct.new(:expressions)
+    include OpReducers
+
+    ##
+    # Same as above.
+
+    def compile(compile_data); reduce_with_comparison(compile_data, :>=); end
+
+  end
+
+  class NotExp < Struct.new(:expression)
+
+    ##
+    # e :!
+
+    def compile(compile_data); self.expression.compile(compile_data) + I[:!]; end
+
+  end
+
+  class NegExp < Struct.new(:expression)
+
+    ##
+    # e :-@
+
+    def compile(compile_data); self.expression.compile(compile_data) + I[:-@]; end
+
+  end
 
   class Assignment < Struct.new(:left, :right); end
 
@@ -88,7 +196,14 @@ module CMachineGrammar
 
   class StatementBlock < Struct.new(:statements); end
 
-  class Statements < Struct.new(:statements); end
+  class Statements < Struct.new(:statements)
+
+    ##
+    # s1 pop s2 pop s3 pop ... sn pop
+
+    def compile(compile_data); self.statements.map {|s| s.compile(compile_data) + I[:pop, 1]}.reduce(&:+); end
+
+  end
 
   class IntType; end
 

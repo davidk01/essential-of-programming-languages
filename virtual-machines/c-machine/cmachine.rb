@@ -13,17 +13,24 @@ class CMachine
   # :storea s c
   # :jump a
   # :jumpz a
+  # :jumpnz a
   # :jumpi a
   # :dup
   # :*, :/, :+, :-, :%
   # :==, :!=, :<, :<=, :>, :>=
   # :-@, :!
+  # :&, :|
 
   # An instruction is just a symbol along with any necessary arguments.
   # E.g. +Instruction.new(:loadc, [1])+
   class Instruction < Struct.new(:instruction, :arguments)
     def self.[](instruction, *arguments); [new(instruction, arguments)]; end
   end
+
+  ##
+  # Readers for most of the internal state. Will help with debugging.
+
+  attr_reader :code, :stack, :pc, :ir
 
   # Set up the initial stack and registers.
   def initialize(c)
@@ -32,8 +39,7 @@ class CMachine
 
   # Retrieve next instruction and execute it.
   def step
-    @ir = @code[@pc += 1]
-    execute
+    @ir = @code[@pc += 1]; execute
   end
 
   # Instruction dispatcher.
@@ -70,6 +76,8 @@ class CMachine
       @pc = @ir.arguments[0]
     when :jumpz
       @pc = @ir.arguments[0] if @stack.pop == 0
+    when :jumpnz
+      @pc = @ir.arguments[0] if @stack.pop != 0
     when :jumpi
       @pc = @ir.arguments[0] + @stack.pop
     when :dup
@@ -81,7 +89,11 @@ class CMachine
     when :==, :!=, :<, :<=, :>, :>=
       right = @stack.pop
       left = @stack.pop
-      @stack.push(left.send(sym, right) ? right : 0)
+      @stack.push(left.send(sym, right) ? 1 : 0)
+    when :&, :|
+      right = stack.pop
+      left = stack.pop
+      @stack.push(left.send(sym, right))
     when :-@
       @stack.push @stack.pop.send(sym)
     when :!
