@@ -3,11 +3,21 @@ I = CMachine::Instruction
 
 module CMachineGrammar
 
-  module OpReducers
+  ##
+  # Arithmetic and order operations have a common structure when it comes to compiling them
+  # to stack operations so factor out that functionality.
+
+  class OpReducers < Struct.new(:expressions)
+
+    ##
+    # e.g. :+, :-, :/, :*
 
     def reduce_with_operation(compile_data, operation)
       self.expressions.map {|e| e.compile(compile_data)}.reduce(&:+) + I[operation] * (self.expressions.length - 1)
     end
+
+    ##
+    # e.g. :<, :==, :>, etc.
 
     def reduce_with_comparison(compile_data, comparison)
       exprs = self.expressions.map {|e| e.compile(compile_data)}
@@ -32,8 +42,7 @@ module CMachineGrammar
 
   end
 
-  class DiffExp < Struct.new(:expressions)
-    include OpReducers
+  class DiffExp < OpReducers
 
     ##
     # For each expression in the list of expressions we compile it and then we append n - 1 :- operations,
@@ -43,8 +52,7 @@ module CMachineGrammar
 
   end
 
-  class AddExp < Struct.new(:expressions)
-    include OpReducers
+  class AddExp < OpReducers
 
     ##
     # Same reasoning as for +DiffExp+ except we use :+.
@@ -53,8 +61,7 @@ module CMachineGrammar
 
   end
 
-  class MultExp < Struct.new(:expressions)
-    include OpReducers
+  class MultExp < OpReducers
 
     ##
     # Same as above.
@@ -63,8 +70,7 @@ module CMachineGrammar
 
   end
 
-  class DivExp < Struct.new(:expressions)
-    include OpReducers
+  class DivExp < OpReducers
 
     # Same as above.
 
@@ -72,8 +78,7 @@ module CMachineGrammar
 
   end
 
-  class LessExp < Struct.new(:expressions)
-    include OpReducers
+  class LessExp < OpReducers
 
     ##
     # e1 e2 :< e2 e3 :< e3 e4 :< ... en-1 en :< :& :& ... :&
@@ -82,8 +87,7 @@ module CMachineGrammar
 
   end
 
-  class LessEqExp < Struct.new(:expressions)
-    include OpReducers
+  class LessEqExp < OpReducers
 
     ##
     # Same as above.
@@ -92,8 +96,7 @@ module CMachineGrammar
 
   end
 
-  class EqExp < Struct.new(:expressions)
-    include OpReducers
+  class EqExp < OpReducers
 
     ##
     # Same as above.
@@ -102,8 +105,7 @@ module CMachineGrammar
 
   end
 
-  class GreaterExp < Struct.new(:expressions)
-    include OpReducers
+  class GreaterExp < OpReducers
 
     ##
     # Same as above.
@@ -112,8 +114,7 @@ module CMachineGrammar
 
   end
 
-  class GreaterEqExp < Struct.new(:expressions)
-    include OpReducers
+  class GreaterEqExp < OpReducers
 
     ##
     # Same as above.
