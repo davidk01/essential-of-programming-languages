@@ -61,14 +61,14 @@ module CMachineGrammar
 
     # x = expression; (statement)
     var_assignment = (identifier[:var] > ws > m('=') > cut! > ws >
-     r(:expression)[:expr] > ws > one_of(';')) >> ->(s) {
+     r(:expression)[:expr]) >> ->(s) {
       [Assignment.new(s[:var][0], s[:expr][0])]
     }
     
     # { s* }
     statement_block = (one_of('{') > cut! > (ws > r(:statement)).many.any[:statements] >
      ws > one_of('}') > cut!) >> ->(s) {
-      [StatementBlock.new(s[:statements])]
+      [Statements.new(s[:statements])]
     }
 
     # if (e) { s+ } (else { s+ })?
@@ -76,7 +76,7 @@ module CMachineGrammar
      one_of(')') > cut! > ws > statement_block[:true_branch] >
      (ws > m('else') > cut! > ws > statement_block[:false_branch] > cut!).any) >> ->(s) {
       [If.new(s[:test][0], s[:true_branch][0], (false_branch = s[:false_branch]) ? 
-       false_branch[0] : StatementBlock.new([]))]
+       false_branch[0] : Statements.new([]))]
     }
 
     # while (e) { s+ }
@@ -85,10 +85,16 @@ module CMachineGrammar
       [While.new(s[:test][0], s[:body][0])]
     }
 
+    # need to wrap up an expression into a statement otherwise we are missing :pop operations
+    # during compilation.
+    expression_statement = (r(:expression) > ws > one_of(';').ignore)[:expression] >> ->(s) {
+      [ExpressionStatement.new(s[:expression][0])]
+    }
+
     # for (e1; e2; e3) { s+ }
-    for_statement = (m('for') > cut! > ws > one_of('(') > cut! > ws > r(:statement)[:init] >
-     cut! > ws > r(:statement)[:test] > cut! > ws >
-     r(:statement)[:update] > ws > one_of(')') > ws > statement_block[:body]) >> ->(s) {
+    for_statement = (m('for') > cut! > ws > one_of('(') > ws > expression_statement[:init] >
+     cut! > ws > expression_statement[:test] > cut! > ws >
+     r(:expression)[:update] > ws > one_of(')') > ws > statement_block[:body]) >> ->(s) {
       [For.new(s[:init][0], s[:test][0], s[:update][0], s[:body][0])]
     }
 
@@ -100,7 +106,7 @@ module CMachineGrammar
 
     # switch (e) { case 0: { s+ } case 1: { s+ } ... default: { s+ } }
     switch_statement = (m('switch') > cut! > ws > one_of('(') > ws > r(:expression)[:test] > ws >
-     one_of(')') > ws > one_of('{') > (ws > case_fragment).many[:cases] > ws >
+     one_of(')') > ws > one_of('{') > cut! > (ws > case_fragment).many[:cases] > ws >
      m('default:') > cut! > ws > statement_block[:default]) >> ->(s) {
       [Switch.new(s[:test][0], s[:cases], s[:default][0])]
     }
@@ -198,8 +204,8 @@ module CMachineGrammar
 
     # all the statements
     rule :statement, function_definition | return_statement | if_statement | while_statement | 
-     for_statement | switch_statement | variable_declaration | struct_declaration | var_assignment |
-     (r(:expression) > one_of(';').ignore) | statement_block | empty_statement
+     for_statement | switch_statement | variable_declaration | struct_declaration |
+     expression_statement | statement_block | empty_statement
 
     # expr; {expr;}*
     rule :statements, (r(:statement)[:first] > (ws > r(:statement)).many.any[:rest]) >> ->(s) {
@@ -207,7 +213,7 @@ module CMachineGrammar
     }
     
     # all the expressions
-    rule :expression, arithmetic_expression | unary_expression | number | function_call |
+    rule :expression, arithmetic_expression | unary_expression | number | function_call | var_assignment |
      identifier
 
     rule :start, r(:statements)

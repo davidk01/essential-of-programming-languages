@@ -47,7 +47,7 @@ class CMachine
     case (sym = @ir.instruction)
     when :label
     when :pop
-      @ir.arguments[0].times { return @stack.pop }
+      @ir.arguments[0].times { result = @stack.pop }; result
     when :loadc
       @stack.push(@ir.arguments[0])
     when :load

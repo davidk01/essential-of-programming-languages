@@ -22,15 +22,22 @@ module CMachineGrammar
 
     def reduce_with_comparison(compile_data, comparison)
       exprs = self.expressions.map {|e| e.compile(compile_data)}
-      comparisons = exprs[0...-1].zip(exprs[1..-1]).map {|a, b| a + b + I[comparison]}.reduce(&:+)
+      comparisons = exprs[0...-1].zip(exprs[1..-1]).map {|a, b| a + b + I[comparison]}.flatten
       comparisons + I[:&] * (self.expressions.length - 2)
     end
 
   end
 
-  class CompileData < Struct.new(:labels, :variables, :types); end
+  class CompileData
+
+    def initialize; @label_counter = -1; end
+
+    def get_label; "label#{@label_counter += 1}".to_sym; end
+
+  end
 
   # AST classes
+
   class Identifier < Struct.new(:value); end
 
   class ConstExp < Struct.new(:value)
@@ -186,24 +193,80 @@ module CMachineGrammar
     def compile(compile_data)
       test_target, end_target = compile_data.get_label, compile_data.get_label
       self.init.compile(compile_data) + I[:label, test_target] +
-       self.test.compile(compile_data) + I[:jumpz, end_target] +
-       self.body.compile(compile_data) + I[:jump, test_target] + I[:label, end_target]
+       self.test.expression.compile(compile_data) + I[:jumpz, end_target] +
+       self.body.compile(compile_data) + self.update.compile(compile_data) + I[:pop, 1] +
+       I[:jump, test_target] + I[:label, end_target]
     end
 
   end
 
-  class CaseFragment < Struct.new(:case, :body); end
+  class CaseFragment < Struct.new(:case, :body)
 
-  class Switch < Struct.new(:test, :cases, :default); end
+    ##
+    # Just compile the body. The rest is taken care of by the parent node
+    # which should always be a +Switch+ node.
 
-  class StatementBlock < Struct.new(:statements); end
+    def compile(compile_data); self.body.compile(compile_data); end
+
+  end
+
+  class Switch < Struct.new(:test, :cases, :default)
+
+    ##
+    # Assume the cases are sorted then generating the code is pretty simple.
+    # The base case is less than 3 case values. For less than 3 values we generate
+    # a simple comparison ladder. For the non-base case we proceed recursively by
+    # breaking things into middle, top, bottom and then concatenating the generated code
+    # with appropriate jump targets when the case matches and jumps to the other pieces of
+    # the ladder when it doesn't.
+
+    def generate_binary_search_code(cases, labels, compile_data)
+      if cases.length < 3
+        cases.map {|c| I[:dup] + I[:loadc, (c_val = c.case.value)] + I[:==] + I[:jumpnz, labels[c_val]]}.flatten
+      else
+        # mid top :less bottom
+        midpoint, less_label = cases.length / 2, compile_data.get_label
+        middle, bottom, top = cases[midpoint], cases[0...midpoint], cases[(midpoint + 1)..-1]
+        I[:dup] + I[:loadc, (m_val = middle.case.value)] + I[:==] + I[:jumpnz, labels[m_val]] +
+         I[:dup] + I[:loadc, m_val] + I[:<] + I[:jumpnz, less_label] +
+         generate_binary_search_code(top, labels, compile_data) + I[:label, less_label] +
+         generate_binary_search_code(bottom, labels, compile_data)
+      end
+    end
+
+    ##
+    # We are going to use binary search to figure out which case statement to jump to.
+    # First we sort the case statements and assign jump targets to each statement. Then we
+    # generate the binary search for the cases and place it before the case blocks.
+    # Test Data: "switch (1) {\n  case 1: { 1; }\n  case 2: { 2; }\n  case 3: { 3; }\n  case 4: { 4; }\n  case 5: { 5; }\n  case 6: { 6; }\n  case 7: { 7; }\n  default: { 111; }\n}\n"
+
+    def compile(compile_data)
+      default_label = compile_data.get_label
+      sorted_cases = self.cases.sort {|a, b| a.case.value <=> b.case.value}
+      labels = sorted_cases.reduce({}) {|m, c| m[c.case.value] = compile_data.get_label; m}
+      binary_search_sequence = generate_binary_search_code(sorted_cases, labels, compile_data)
+      (self.test.compile(compile_data) + binary_search_sequence + I[:jump, default_label] + sorted_cases.map {|c|
+        I[:label, labels[c.case.value]] + c.compile(compile_data)
+      } + I[:label, default_label] + self.default.compile(compile_data)).flatten
+    end
+
+  end
 
   class Statements < Struct.new(:statements)
 
     ##
     # s1 pop s2 pop s3 pop ... sn pop
 
-    def compile(compile_data); self.statements.map {|s| s.compile(compile_data) + I[:pop, 1]}.reduce(&:+); end
+    def compile(compile_data); self.statements.map {|s| s.compile(compile_data)}.flatten; end
+
+  end
+
+  class ExpressionStatement < Struct.new(:expression)
+
+    ##
+    # Pretty simple. Compile the expression and then pop.
+
+    def compile(compile_data); self.expression.compile(compile_data) + I[:pop, 1]; end
 
   end
 
