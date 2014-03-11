@@ -19,12 +19,12 @@ module CMachineGrammar
     ws, sep = one_of(/\s/).many.any.ignore, one_of(/\s/).many.ignore
 
     # just integers for the time being
-    number = one_of(/\d/).many[:digits] >> ->(s) {
-      [ConstExp.new(s[:digits].map(&:text).join.to_i)]
+    number = (one_of(/\d/).many[:digits] > (one_of('.') > one_of(/\d/).many.any).any[:fraction]) >> ->(s) {
+      [ConstExp.new(s[:digits].map(&:text).join.to_i + s[:fraction].map(&:text).join.to_f)]
     }
 
     # careful with punctuation
-    identifier = one_of(/[^\s\(\),;<{}\.\->]/).many[:chars] >> ->(s) {
+    identifier = one_of(/[^\s\(\),;<{}\.\->:]/).many[:chars] >> ->(s) {
       [Identifier.new(s[:chars].map(&:text).join)]
     }
 
@@ -124,6 +124,8 @@ module CMachineGrammar
           FloatType
         when 'bool'
           BoolType
+        when 'void'
+          VoidType
         end
       else
         DerivedType.new(s[:derived][0])
@@ -145,7 +147,7 @@ module CMachineGrammar
     rule :type_expression, ptr_type | array_type | basic_type
 
     # typed variable declaration along with optional assignment (statement)
-    variable_declaration = (r(:type_expression)[:type] > ws > identifier[:variable] >
+    variable_declaration = (identifier[:variable] > ws > one_of(':') > ws > r(:type_expression)[:type] >
      ws > (one_of('=').ignore > cut! > ws > r(:expression)).any[:value] > one_of(';')) >> ->(s) {
       [VariableDeclaration.new(s[:type][0], s[:variable][0], s[:value][0])]
     }
@@ -153,7 +155,7 @@ module CMachineGrammar
     # function definition components
 
     # type variable_name
-    function_definition_argument = (r(:type_expression)[:type] > sep > identifier[:name]) >> ->(s) {
+    function_definition_argument = (identifier[:name] > ws > one_of(':') > ws > r(:type_expression)[:type]) >> ->(s) {
       [ArgumentDefinition.new(s[:type][0], s[:name][0])]
     }
 
@@ -163,10 +165,10 @@ module CMachineGrammar
       s[:first] + s[:rest]
     }
 
-    # return_type function_name({type arg}*) { statments* } (statement)
-    function_definition = (r(:type_expression)[:return_type] > sep > identifier[:function_name] >
-     ws > one_of('(') > function_arguments.any[:arguments] > one_of(')') > ws >
-     statement_block[:function_body] > cut!) >> ->(s) {
+    # function_name({type arg}*) -> return_type { statments* } (statement)
+    function_definition = (identifier[:function_name] > ws > one_of('(') > function_arguments.any[:arguments] >
+     one_of(')') > ws > m('->') > ws > r(:type_expression)[:return_type] > ws > statement_block[:function_body] >
+     cut!) >> ->(s) {
       [FunctionDefinition.new(s[:return_type][0], s[:function_name][0],
        s[:arguments], s[:function_body][0])]
     }
@@ -190,13 +192,13 @@ module CMachineGrammar
       [ReturnStatement.new(s[:return][0])]
     }
 
-    # struct member : {type var;}
-    struct_member = (r(:type_expression)[:type] > sep > identifier[:name] >
+    # {var : type;}
+    struct_member = (identifier[:name] > ws > one_of(':') > ws > r(:type_expression)[:type] >
      ws > one_of(';')) >> ->(s) {
       [StructMember.new(s[:type][0], s[:name][0])]
     }
 
-    # struct name { {type var;}+ }
+    # struct name { {var : type;}+ }
     struct_declaration = (m('struct') > cut! > sep > identifier[:name] > ws > one_of('{') >
      ws > (struct_member > ws > cut!).many[:members] > ws > one_of('}')) >> ->(s) {
       [StructDeclaration.new(s[:name][0], s[:members])]

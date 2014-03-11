@@ -276,6 +276,8 @@ module CMachineGrammar
 
   class BoolType; end
 
+  class VoidType; end
+
   class StructMember < Struct.new(:type, :name); end
 
   class StructDeclaration < Struct.new(:name, :members); end
