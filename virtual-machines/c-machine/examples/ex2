@@ -1,5 +1,5 @@
-int main() {
-  int x = 0;
+main() -> int {
+  x : int = 0;
   if (x) {
     return 1;
   }
