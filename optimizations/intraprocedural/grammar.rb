@@ -41,15 +41,25 @@ class ToyLang
       [s[:op].text, s[:left], s[:right]]
     }
 
+    # expressions, lvalues, rvalues
+    
+    expression = comparisons | r(:arithmetic)
+
+    lvalue = r(:memory_access) | variable
+
     # memory access
 
-    rule :memory_access, (m('M[') > cut! > ws > r(:arithmetic)[:expression] > ws > one_of(']')) >> ->(s) {
+    rule :memory_access, (m('M[') > ws > expression[:expression] > ws > one_of(']')) >> ->(s) {
       ['memory access', s[:expression]]
     }
 
-    # TODO: assignment
+    # assignment
 
-    rule :start, comparisons | r(:arithmetic)
+    assignment = (lvalue[:left] > ws > one_of('=') > cut! > ws > expression[:right]) >> ->(s) {
+      ['=', s[:left], s[:right]]
+    }
+
+    rule :start, assignment | comparisons | r(:arithmetic)
   end
 
   def self.parse(str); @grammar.parse(str); end
