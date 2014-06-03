@@ -59,8 +59,20 @@ class ToyLang
 
     # statements
     
-    rule :statement, ((assignment[:assignment] > cut! > ws > (one_of(';') << ->(s, ctx, e) {
-      puts "Assignment statement must be terminated with ';'."; []
+    label = (m('label') > cut! > ws > (one_of(/[a-zA-Z]/).many[:label] << ->(s, ctx, e) {
+      puts "ERROR: Label must be composed of /a-zA-Z/."
+    }) > one_of(';')) >> ->(s) {
+      ['label', s[:label].map(&:text).join]
+    }
+
+    goto = (m('goto') > cut! > ws > (one_of(/[a-zA-Z]/).many[:label] << ->(s, ctx, e) {
+      puts "ERROR: Goto label must be composed of /a-zA-Z/."
+    }) > one_of(';')) >> ->(s) {
+      ['goto', s[:label].map(&:text).join]
+    }
+
+    rule :statement, label | goto | ((assignment[:assignment] > cut! > ws > (one_of(';') << ->(s, ctx, e) {
+      puts "WARNING: Assignment statement must be terminated with ';'."; []
     }) > cut!) >> ->(s) {
       s[:assignment]
     }) | r(:if_statement)
