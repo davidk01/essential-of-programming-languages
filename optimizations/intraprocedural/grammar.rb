@@ -4,7 +4,7 @@ require 'pegrb'
 class ToyLang
 
   @grammar = Grammar.rules do
-    # ground terms
+    # basic terms
 
     ws = one_of(/\s/).many.any.ignore
 
@@ -15,6 +15,8 @@ class ToyLang
     integer = one_of(/[0-9]/).many[:digits] >> ->(s) {
       s[:digits].map(&:text).join.to_i
     }
+
+    basic = integer | r(:memory_access) | variable
 
     # expressions
 
@@ -30,7 +32,7 @@ class ToyLang
 
     rule :primary, ((one_of('(') > ws > r(:additive)[:group] > ws > one_of(')')) >> ->(s) {
       s[:group]
-    }) | integer | r(:memory_access) | variable
+    }) | basic
 
     rule :arithmetic, r(:additive)
 
@@ -41,21 +43,17 @@ class ToyLang
       [s[:op].text, s[:left], s[:right]]
     }
 
-    # expressions, lvalues, rvalues
-    
-    expression = comparisons | r(:arithmetic)
-
-    lvalue = r(:memory_access) | variable
-
     # memory access
 
-    rule :memory_access, (m('M[') > ws > expression[:expression] > ws > one_of(']')) >> ->(s) {
+    rule :memory_access, (m('M[') > cut! > ws > r(:arithmetic)[:expression] > ws > one_of(']')) >> ->(s) {
       ['memory access', s[:expression]]
     }
 
     # assignment
 
-    assignment = (lvalue[:left] > ws > one_of('=') > cut! > ws > expression[:right]) >> ->(s) {
+    lvalue = r(:memory_access) | variable
+
+    assignment = (lvalue[:left] > ws > one_of('=') > cut! > ws > r(:arithmetic)[:right]) >> ->(s) {
       ['=', s[:left], s[:right]]
     }
 
