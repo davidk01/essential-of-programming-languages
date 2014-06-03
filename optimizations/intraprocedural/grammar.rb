@@ -57,7 +57,30 @@ class ToyLang
       ['=', s[:left], s[:right]]
     }
 
-    rule :start, assignment | comparisons | r(:arithmetic)
+    # statements
+    
+    rule :statement, ((assignment[:assignment] > cut! > ws > (one_of(';') << ->(s, ctx, e) {
+      puts "Assignment statement must be terminated with ';'."; []
+    }) > cut!) >> ->(s) {
+      s[:assignment]
+    }) | r(:if_statement)
+
+    rule :statements, (r(:statement)[:first] > ws > r(:statements).any[:rest]) >> ->(s) {
+      [s[:first]] + s[:rest]
+    }
+
+    statement_block = (one_of('{') > cut! > ws > r(:statements)[:statements] >
+     one_of('}') > cut!) >> ->(s) {
+      s[:statements]
+    }
+
+    rule :if_statement, (m('if') > cut! > ws > one_of('(') > ws >
+     (comparisons | r(:arithmetic))[:condition] > ws > one_of(')') > ws >
+     statement_block[:then] > ws > (m('else') > ws > statement_block[:else]).any) >> ->(s) {
+      ['if', s[:then], s[:else]]
+    }
+
+    rule :start, r(:statements)
   end
 
   def self.parse(str); @grammar.parse(str); end
