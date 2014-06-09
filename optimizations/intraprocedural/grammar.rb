@@ -5,7 +5,6 @@ class ToyLang
 
   @grammar = Grammar.rules do
     # basic terms
-
     ws = one_of(/\s/).many.any.ignore
 
     variable = one_of(/[a-zA-Z]/).many[:chars] >> ->(s) {
@@ -18,8 +17,7 @@ class ToyLang
 
     basic = integer | r(:memory_access) | variable
 
-    # expressions
-
+    # arithmetic expressions, e.g. x + y, M[x] + z, 1 + 2 + M[x * y + M[z]], etc.
     rule :additive, ((r(:multiplicative)[:left] > ws > one_of('+', '-')[:op] >
      ws > r(:additive)[:right]) >> ->(s) {
       [s[:op].text, s[:left], s[:right]]
@@ -36,29 +34,25 @@ class ToyLang
 
     rule :arithmetic, r(:additive)
 
-    # comparison expressions
-
+    # comparison expressions, e.g x < y, x > y, x == y, x != y, x <= y, x >= y
     comparisons = (r(:arithmetic)[:left] > ws > (one_of('<', '>') | m('==') | m('!=') | m('<=') | m('>='))[:op] >
      ws > r(:arithmetic)[:right]) >> ->(s) {
       [s[:op].text, s[:left], s[:right]]
     }
 
-    # memory access
-
+    # memory access, e.g. M[x + y + M[z]]
     rule :memory_access, (m('M[') > cut! > ws > r(:arithmetic)[:expression] > ws > one_of(']')) >> ->(s) {
       ['memory access', s[:expression]]
     }
 
-    # assignment
-
+    # assignment, e.g. M[expr] = expr, var = expr
     lvalue = r(:memory_access) | variable
 
     assignment = (lvalue[:left] > ws > one_of('=') > cut! > ws > r(:arithmetic)[:right]) >> ->(s) {
       ['=', s[:left], s[:right]]
     }
 
-    # statements
-    
+    # statements, e.g. label xyz;, goto xyz;, x = y;, if (x + y | x < y) { stmts* } else { stmts* }
     label = (m('label') > cut! > ws > (one_of(/[a-zA-Z]/).many[:label] << ->(s, ctx, e) {
       puts "ERROR: Label must be composed of /a-zA-Z/."
     }) > one_of(';')) >> ->(s) {
@@ -92,6 +86,7 @@ class ToyLang
       ['if', s[:then], s[:else]]
     }
 
+    # a program is a list of statements
     rule :start, r(:statements)
   end
 
