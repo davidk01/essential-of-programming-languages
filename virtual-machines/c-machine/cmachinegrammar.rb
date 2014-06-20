@@ -9,33 +9,34 @@ module CMachineGrammar
 
   @grammar = Grammar.rules do
 
-    # There is a common structure to expression of the form {op}(expr {, expr}+) so we
+    # There is a common structure to expressions of the form {op}(expr {, expr}+) so we
     # can map "op" to a class as soon as we see it.
     operator_class_mapping = {'-' => DiffExp, '+' => AddExp, '*' => MultExp, '/' => DivExp,
      '<' => LessExp, '<=' => LessEqExp, '=' => EqExp, '>' => GreaterExp, '>=' => GreaterEqExp,
-     'not' => NotExp, 'neg' => NegExp
-    }
+     'not' => NotExp, 'neg' => NegExp}
 
+    # Whitespace and separators.
     ws, sep = one_of(/\s/).many.any.ignore, one_of(/\s/).many.ignore
 
-    # just integers for the time being
+    # Numbers, e.g. 123, 123.544.
     number = (one_of(/\d/).many[:digits] > (one_of('.') > one_of(/\d/).many.any).any[:fraction]) >> ->(s) {
-      [ConstExp.new(s[:digits].map(&:text).join.to_i + s[:fraction].map(&:text).join.to_f)]
+      ConstExp.new(s[:digits].map(&:text).join.to_i + s[:fraction].map(&:text).join.to_f)
     }
 
-    # careful with punctuation
+    # Need to be careful with identifiers to not be overly restrictive but also to not eat up
+    # other grammatical punctuations like type declarations, sequencing, function calls, etc.
     identifier = one_of(/[^\s\(\),;<{}\.\->:]/).many[:chars] >> ->(s) {
-      [Identifier.new(s[:chars].map(&:text).join)]
+      Identifier.new(s[:chars].map(&:text).join)
     }
 
     # <=, <, =, >, >=
     order_operator = ((m('<=') | m('>=') | one_of('<', '=', '>'))[:operator] > cut!) >> ->(s) {
-      [operator_class_mapping[s[:operator].map(&:text).join]]
+      operator_class_mapping[s[:operator].map(&:text).join]
     }
 
     # -, +, *, /
     arithmetic_operator = (one_of('-', '+', '*', '/')[:operator] > cut!) >> ->(s) {
-      [operator_class_mapping[s[:operator][0].text]]
+      operator_class_mapping[s[:operator].text]
     }
 
     # comparison or arithmetic operator
@@ -43,165 +44,147 @@ module CMachineGrammar
 
     # negation and boolean not
     unary_operator = (m('not') | m('neg'))[:op] >> ->(s) {
-      [operator_class_mapping[s[:op].map(&:text).join]]
+      operator_class_mapping[s[:op].map(&:text).join]
     }
 
     # {not, neg}(expr)
-    unary_expression = (unary_operator[:op] > one_of('(') > cut! > ws >
-        r(:expression)[:expression] > ws > one_of(')') > cut!) >> ->(s) {
-      [s[:op][0].new(s[:expression][0])]
+    unary_expression = (unary_operator[:op] > one_of('(') > cut! > ws > r(:expression)[:expression] >
+     ws > one_of(')') > cut!) >> ->(s) {
+      s[:op].new(s[:expression])
     }
 
     # op(expr {, expr}+)
     arithmetic_expression = (general_arithmetic_operator[:op] > one_of('(') > ws > cut! >
-        r(:expression)[:first] > (ws > one_of(',').ignore > ws > cut! > r(:expression)).many[:rest] >
-        ws > one_of(')') > cut!) >> ->(s) {
-      [s[:op][0].new(s[:first] + s[:rest])]
+     r(:expression)[:first] > (ws > one_of(',').ignore > ws > cut! > r(:expression)).many[:rest] >
+     ws > one_of(')') > cut!) >> ->(s) {
+      s[:op].new([s[:first]] + s[:rest])
     }
 
     # x = expression; (statement)
-    var_assignment = (identifier[:var] > ws > m('=') > cut! > ws >
-     r(:expression)[:expr]) >> ->(s) {
-      [Assignment.new(s[:var][0], s[:expr][0])]
+    var_assignment = (identifier[:var] > ws > m('=') > cut! > ws > r(:expression)[:expr]) >> ->(s) {
+      Assignment.new(s[:var], s[:expr])
     }
     
     # { s* }
     statement_block = (one_of('{') > cut! > (ws > r(:statement)).many.any[:statements] >
      ws > one_of('}') > cut!) >> ->(s) {
-      [Statements.new(s[:statements])]
+      Statements.new(s[:statements])
     }
 
     # if (e) { s+ } (else { s+ })?
     if_statement = (m('if') > cut! > ws > one_of('(') > cut! > ws > r(:expression)[:test] > ws >
      one_of(')') > cut! > ws > statement_block[:true_branch] >
      (ws > m('else') > cut! > ws > statement_block[:false_branch] > cut!).any) >> ->(s) {
-      [If.new(s[:test][0], s[:true_branch][0], (false_branch = s[:false_branch]) ? 
-       false_branch[0] : Statements.new([]))]
+      If.new(s[:test], s[:true_branch], (false_branch = s[:false_branch]) ? 
+       false_branch : Statements.new([]))
     }
 
     # while (e) { s+ }
     while_statement = (m('while') > cut! > ws > one_of('(') > cut! > ws > r(:expression)[:test] >
      ws > one_of(')') > cut! > ws > statement_block[:body]) >> ->(s) {
-      [While.new(s[:test][0], s[:body][0])]
+      While.new(s[:test], s[:body])
     }
 
     # need to wrap up an expression into a statement otherwise we are missing :pop operations
     # during compilation.
     expression_statement = (r(:expression) > ws > one_of(';').ignore)[:expression] >> ->(s) {
-      [ExpressionStatement.new(s[:expression][0])]
+      ExpressionStatement.new(s[:expression])
     }
 
     # for (e1; e2; e3) { s+ }
     for_statement = (m('for') > cut! > ws > one_of('(') > ws > expression_statement[:init] >
      cut! > ws > expression_statement[:test] > cut! > ws >
      r(:expression)[:update] > ws > one_of(')') > ws > statement_block[:body]) >> ->(s) {
-      [For.new(s[:init][0], s[:test][0], s[:update][0], s[:body][0])]
+      For.new(s[:init], s[:test], s[:update], s[:body])
     }
 
     # e.g. case 1: { s+ }
     case_fragment = (m('case') > cut! > sep > number[:case] > one_of(':') > cut! > ws >
      statement_block[:body]) >> ->(s) {
-      [CaseFragment.new(s[:case][0], s[:body][0])]
+      CaseFragment.new(s[:case], s[:body])
     }
 
     # switch (e) { case 0: { s+ } case 1: { s+ } ... default: { s+ } }
     switch_statement = (m('switch') > cut! > ws > one_of('(') > ws > r(:expression)[:test] > ws >
      one_of(')') > ws > one_of('{') > cut! > (ws > case_fragment).many[:cases] > ws >
      m('default:') > cut! > ws > statement_block[:default]) >> ->(s) {
-      [Switch.new(s[:test][0], s[:cases], s[:default][0])]
+      Switch.new(s[:test], s[:cases], s[:default])
     }
 
     # ;
     empty_statement = ws > one_of(';').ignore
 
-    # int or name of a declared type (not an expression or a statement)
+    # Basic types (not an expression or a statement), e.g. int, float.
+    basic_type_mapping = {'int' => IntType, 'float' => FloatType, 'bool' => BoolType, 'void' => VoidType}
     basic_type = ((m('int') | m('float') | m('bool'))[:basic] | identifier[:derived]) >> ->(s) {
-      [if s[:basic]
-        case s[:basic].map(&:text).join
-        when 'int'
-          IntType
-        when 'float'
-          FloatType
-        when 'bool'
-          BoolType
-        when 'void'
-          VoidType
-        end
-      else
-        DerivedType.new(s[:derived][0])
-      end]
+      s[:basic] ? basic_type_mapping[s[:basic].map(&:text).join] : DerivedType.new(s[:derived])
     }
 
-    # pointer type
+    # pointer type, e.g. ptr(int), ptr(float).
     ptr_type = (m('ptr(') > ws > r(:type_expression)[:type] > ws > one_of(')')) >> ->(s) {
-      [PtrType.new(s[:type][0])]
+      PtrType.new(s[:type])
     }
 
-    # array type
+    # array type, e.g. array(int, 10), array(ptr(int), 10)
     array_type = (m('array(') > ws > r(:type_expression)[:type] > ws > one_of(',') >
      ws > number[:count] > ws > one_of(')')) >> ->(s) {
-      [ArrayType.new(s[:type][0], s[:count][0])]
+      ArrayType.new(s[:type], s[:count])
     }
 
     # type expression
     rule :type_expression, ptr_type | array_type | basic_type
 
-    # typed variable declaration along with optional assignment (statement)
+    # typed variable declaration along with optional assignment (statement), e.g. int x, int x = 100.
     variable_declaration = (identifier[:variable] > ws > one_of(':') > ws > r(:type_expression)[:type] >
      ws > (one_of('=').ignore > cut! > ws > r(:expression)).any[:value] > one_of(';')) >> ->(s) {
-      [VariableDeclaration.new(s[:type][0], s[:variable][0], s[:value][0])]
+      VariableDeclaration.new(s[:type], s[:variable], s[:value])
     }
-    
-    # function definition components
 
-    # type variable_name
+    # type variable_name, e.g. var : type, x : ptr(int), x : array(int, 10)
     function_definition_argument = (identifier[:name] > ws > one_of(':') > ws > r(:type_expression)[:type]) >> ->(s) {
-      [ArgumentDefinition.new(s[:type][0], s[:name][0])]
+      ArgumentDefinition.new(s[:type], s[:name])
     }
 
-    # type var1 {, type var2}*
+    # type var1 {, type var2}*, e.g. (x : int, y : int, z : ptr(int))
     function_arguments = (function_definition_argument[:first] > (ws >
      one_of(',').ignore > cut! > function_definition_argument).many.any[:rest]) >> ->(s) {
-      s[:first] + s[:rest]
+      [s[:first]] + s[:rest]
     }
 
-    # function_name({type arg}*) -> return_type { statments* } (statement)
+    # function_name({type arg}*) -> return_type { statments* } (statement), e.g. func(x : int, y : int) -> array(int, 2) { ... }
     function_definition = (identifier[:function_name] > ws > one_of('(') > function_arguments.any[:arguments] >
      one_of(')') > ws > m('->') > ws > r(:type_expression)[:return_type] > ws > statement_block[:function_body] >
      cut!) >> ->(s) {
-      [FunctionDefinition.new(s[:return_type][0], s[:function_name][0],
-       s[:arguments], s[:function_body][0])]
+      FunctionDefinition.new(s[:return_type], s[:function_name], s[:arguments], s[:function_body])
     }
 
-    # function call components
-
-    # arguments {expr,}*
+    # arguments {expr,}*, e.g. (x, y, z, +(x, y))
     function_call_arguments = (r(:expression)[:first] > (ws > one_of(',').ignore > cut! >
      r(:expression)).many.any[:rest]) >> ->(s) {
-      s[:first] + s[:rest]
+      [s[:first]] + s[:rest]
     }
 
-    # function_name({expressions}*)
+    # function_name({expressions}*), e.g. f(1, 2, 3, +(4, 5))
     function_call = (identifier[:function_name] > ws > one_of('(') > ws >
      function_call_arguments.any[:arguments] > ws > one_of(')') > cut!) >> ->(s) {
-      [FunctionCall.new(s[:function_name][0], s[:arguments])]
+      FunctionCall.new(s[:function_name], s[:arguments])
     }
 
-    # return statement
+    # return statement, e.g. return x; return 1; return +(x, y);
     return_statement = (m('return') > sep > r(:expression)[:return] > ws > one_of(';')) >> ->(s) {
-      [ReturnStatement.new(s[:return][0])]
+      ReturnStatement.new(s[:return])
     }
 
-    # {var : type;}
+    # {var : type;}, e.g. xyz : ptr(int);
     struct_member = (identifier[:name] > ws > one_of(':') > ws > r(:type_expression)[:type] >
      ws > one_of(';')) >> ->(s) {
-      [StructMember.new(s[:type][0], s[:name][0])]
+      StructMember.new(s[:type], s[:name])
     }
 
-    # struct name { {var : type;}+ }
+    # struct name { {var : type;}+ }, e.g. struct s { xyz : int; w : ptr(int); }
     struct_declaration = (m('struct') > cut! > sep > identifier[:name] > ws > one_of('{') >
      ws > (struct_member > ws > cut!).many[:members] > ws > one_of('}')) >> ->(s) {
-      [StructDeclaration.new(s[:name][0], s[:members])]
+      StructDeclaration.new(s[:name], s[:members])
     }
 
     # all the statements
@@ -211,7 +194,7 @@ module CMachineGrammar
 
     # expr; {expr;}*
     rule :statements, (r(:statement)[:first] > (ws > r(:statement)).many.any[:rest]) >> ->(s) {
-      [Statements.new(s[:first] + s[:rest])]
+      Statements.new([s[:first]] + s[:rest])
     }
     
     # all the expressions
