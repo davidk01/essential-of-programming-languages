@@ -1,4 +1,4 @@
-require './cmachine'
+require_relative './cmachine'
 I = CMachine::Instruction
 
 module CMachineGrammar

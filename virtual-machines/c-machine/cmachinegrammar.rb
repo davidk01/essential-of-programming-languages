@@ -1,5 +1,5 @@
 require 'pegrb'
-require './ast'
+require_relative './ast'
 
 # The grammar that describes the subset of C we are going to work with.
 # I have taken some liberties with how arithmetic operations are defined
@@ -31,7 +31,7 @@ module CMachineGrammar
 
     # <=, <, =, >, >=
     order_operator = ((m('<=') | m('>=') | one_of('<', '=', '>'))[:operator] > cut!) >> ->(s) {
-      operator_class_mapping[s[:operator].map(&:text).join]
+      operator_class_mapping[s[:operator].text]
     }
 
     # -, +, *, /
@@ -44,7 +44,7 @@ module CMachineGrammar
 
     # negation and boolean not
     unary_operator = (m('not') | m('neg'))[:op] >> ->(s) {
-      operator_class_mapping[s[:op].map(&:text).join]
+      operator_class_mapping[s[:op].text]
     }
 
     # {not, neg}(expr)
@@ -117,7 +117,7 @@ module CMachineGrammar
     # Basic types (not an expression or a statement), e.g. int, float.
     basic_type_mapping = {'int' => IntType, 'float' => FloatType, 'bool' => BoolType, 'void' => VoidType}
     basic_type = ((m('int') | m('float') | m('bool'))[:basic] | identifier[:derived]) >> ->(s) {
-      s[:basic] ? basic_type_mapping[s[:basic].map(&:text).join] : DerivedType.new(s[:derived])
+      s[:basic] ? basic_type_mapping[s[:basic].text] : DerivedType.new(s[:derived])
     }
 
     # pointer type, e.g. ptr(int), ptr(float).

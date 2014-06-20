@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+require_relative './cmachinegrammar'
+require 'pp'
+
+pp CMachineGrammar.parse(File.read(ARGV[0]))
