@@ -1,5 +1,5 @@
 main() -> int {
-  x : ptr(int) = 10;
+  x : int = 10;
   for (x; <(x, 10); x = +(x, 1)) {
     print(x);
   }

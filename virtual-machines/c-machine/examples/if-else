@@ -1,5 +1,6 @@
 main() -> int {
   x : int = 1;
+  y : bool;
   if (x) {
     return 1;
   } else {

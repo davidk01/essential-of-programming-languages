@@ -1,6 +1,0 @@
-main() -> int {
-  x : int = 0;
-  if (x) {
-    return 1;
-  }
-}

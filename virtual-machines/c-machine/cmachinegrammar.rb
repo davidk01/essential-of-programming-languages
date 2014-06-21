@@ -184,7 +184,7 @@ module CMachineGrammar
     # struct name { {var : type;}+ }, e.g. struct s { xyz : int; w : ptr(int); }
     struct_declaration = (m('struct') > cut! > sep > identifier[:name] > ws > one_of('{') >
      ws > (struct_member > ws > cut!).many[:members] > ws > one_of('}')) >> ->(s) {
-      StructDeclaration.new(s[:name], s[:members])
+      StructDeclaration.new(s[:name], s[:members].flatten)
     }
 
     # all the statements
