@@ -57,7 +57,7 @@ module CMachineGrammar
     arithmetic_expression = (general_arithmetic_operator[:op] > one_of('(') > ws > cut! >
      r(:expression)[:first] > (ws > one_of(',').ignore > ws > cut! > r(:expression)).many[:rest] >
      ws > one_of(')') > cut!) >> ->(s) {
-      s[:op].new([s[:first]] + s[:rest])
+      s[:op].new([s[:first]] + s[:rest].flatten)
     }
 
     # x = expression; (statement)
@@ -68,7 +68,7 @@ module CMachineGrammar
     # { s* }
     statement_block = (one_of('{') > cut! > (ws > r(:statement)).many.any[:statements] >
      ws > one_of('}') > cut!) >> ->(s) {
-      Statements.new(s[:statements])
+      Statements.new(s[:statements].flatten)
     }
 
     # if (e) { s+ } (else { s+ })?
