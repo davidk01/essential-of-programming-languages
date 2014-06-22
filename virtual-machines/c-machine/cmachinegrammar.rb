@@ -20,13 +20,13 @@ module CMachineGrammar
 
     # Numbers, e.g. 123, 123.544.
     number = (one_of(/\d/).many[:digits] > (one_of('.') > one_of(/\d/).many.any).any[:fraction]) >> ->(s) {
-      ConstExp.new(s[:digits].map(&:text).join.to_i + s[:fraction].map(&:text).join.to_f)
+      s[:digits].map(&:text).join.to_i + s[:fraction].map(&:text).join.to_f
     }
 
     # Need to be careful with identifiers to not be overly restrictive but also to not eat up
     # other grammatical punctuations like type declarations, sequencing, function calls, etc.
     identifier = one_of(/[^\s\(\),;<{}\.\->:]/).many[:chars] >> ->(s) {
-      Identifier.new(s[:chars].map(&:text).join)
+      s[:chars].map(&:text).join
     }
 
     # <=, <, =, >, >=
@@ -194,7 +194,7 @@ module CMachineGrammar
 
     # expr; {expr;}*
     rule :statements, (r(:statement)[:first] > (ws > r(:statement)).many.any[:rest]) >> ->(s) {
-      Statements.new([s[:first]] + s[:rest])
+      Statements.new([s[:first]] + s[:rest].flatten)
     }
     
     # all the expressions

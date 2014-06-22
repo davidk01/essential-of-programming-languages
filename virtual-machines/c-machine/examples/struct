@@ -1,11 +1,17 @@
-struct Test {
+struct BasicStruct {
   a : int;
   b : int;
   c : ptr(int);
 }
 
-struct AnotherTest {
+struct AnotherBasicStruct {
   a : int;
   b : int;
-  st : ptr(Test);
+  c : ptr(Test);
+}
+
+struct NonBasicStruct {
+  a : int;
+  b : array(int, 10);
+  c : BasicStruct;
 }
