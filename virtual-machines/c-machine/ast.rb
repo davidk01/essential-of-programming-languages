@@ -244,7 +244,7 @@ module CMachineGrammar
     ##
     # We are going to use binary search to figure out which case statement to jump to.
     # First we sort the case statements and assign jump targets to each statement. Then we
-    # generate the binary search for the cases and place it before the case blocks.
+    # generate the binary search ladder for the cases and place it before the case blocks.
 
     def compile(compile_data)
       # Sort and generate labels for the cases.
@@ -337,17 +337,30 @@ module CMachineGrammar
 
     ##
     # The offset for the struct members is exactly what you'd expect. It is the sum of all
-    # the members that are declared before that member.
+    # the members that are declared before that member and this information is computed when
+    # we compute the total size of the struct because that information is available during the
+    # total size calculation.
     
     def offset(compile_data, member)
-      # TODO: Need to figure out what the best way is to compute and report errors.
+      # Call size to instantiate +@offsets+ hash and then lookup the member in the hash.
+      size(compile_data)
+      if (member_offset = @offsets[member]).nil?
+        raise StandardError, "Unknown struct member #{member} for struct #{name}."
+      end
+      member_offset
     end
 
     ##
-    # The size of a declared struct is the sum of the sizes of all its members.
+    # The size of a declared struct is the sum of the sizes of all its members and as
+    # we are computing the size of the entire struct we can also compute and save the offsets
+    # for the struct members in +@offsets+.
 
     def size(compile_data)
-      @size ||= members.reduce(0) {|m, member| m + member.size(compile_data)}
+      @offsets ||= {}
+      @size ||= members.reduce(0) do |m, member|
+        @offsets[member.name] = m
+        m + member.size(compile_data)
+      end
     end
 
     ##
