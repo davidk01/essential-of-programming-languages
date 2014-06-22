@@ -21,16 +21,21 @@ module CMachineGrammar
     # e.g. :<, :==, :>, etc.
 
     def reduce_with_comparison(compile_data, comparison)
-      exprs = self.expressions.map {|e| e.compile(compile_data)}
+      exprs = expressions.map {|e| e.compile(compile_data)}
       comparisons = exprs[0...-1].zip(exprs[1..-1]).map {|a, b| a + b + I[comparison]}.flatten
-      comparisons + I[:&] * (self.expressions.length - 2)
+      comparisons + I[:&] * (expressions.length - 2)
     end
 
   end
 
-  class CompileData
+  ##
+  # Keeps track of some global counters and data as we compile C-variant code into
+  # VM code.
 
-    def initialize; @label_counter = -1; end
+  class CompileData
+    attr_reader :structs
+
+    def initialize; @label_counter, @structs = -1, {}; end
 
     def get_label; "label#{@label_counter += 1}".to_sym; end
 
@@ -46,7 +51,7 @@ module CMachineGrammar
     # Just load the constant.
     # :loadc self.value
 
-    def compile(_); I[:loadc, self.value]; end
+    def compile(_); I[:loadc, value]; end
 
   end
 
@@ -136,7 +141,7 @@ module CMachineGrammar
     ##
     # e :!
 
-    def compile(compile_data); self.expression.compile(compile_data) + I[:!]; end
+    def compile(compile_data); expression.compile(compile_data) + I[:!]; end
 
   end
 
@@ -145,7 +150,7 @@ module CMachineGrammar
     ##
     # e :-@
 
-    def compile(compile_data); self.expression.compile(compile_data) + I[:-@]; end
+    def compile(compile_data); expression.compile(compile_data) + I[:-@]; end
 
   end
 
@@ -161,9 +166,9 @@ module CMachineGrammar
 
     def compile(compile_data)
       else_target, end_target = compile_data.get_label, compile_data.get_label
-      self.test.compile(compile_data) + I[:jumpz, else_target] +
-       self.true_branch.compile(compile_data) + I[:jump, end_target] + I[:label, else_target] +
-       self.false_branch.compile(compile_data) + I[:label, end_target]
+      test.compile(compile_data) + I[:jumpz, else_target] +
+       true_branch.compile(compile_data) + I[:jump, end_target] + I[:label, else_target] +
+       false_branch.compile(compile_data) + I[:label, end_target]
     end
 
   end
@@ -177,8 +182,8 @@ module CMachineGrammar
 
     def compile(compile_data)
       test_target, end_target = compile_data.get_label, compile_data.get_label
-      I[:label, test_target] + self.test.compile(compile_data) + I[:jumpz, end_target] +
-       self.body.compile(compile_data) + I[:jump, test_target]
+      I[:label, test_target] + test.compile(compile_data) + I[:jumpz, end_target] +
+       body.compile(compile_data) + I[:jump, test_target]
     end
 
   end
@@ -188,13 +193,13 @@ module CMachineGrammar
     ##
     # For loop for(e1;e2;e3;) { s } is equivalent to e1; while (e2) { s; e3; } so we compile it as
     # init [:test] test jumpz(:end) body update jump(:test) [:end]
-    # A bit twisty but manageable.
+    # A bit convoluted but manageable.
 
     def compile(compile_data)
       test_target, end_target = compile_data.get_label, compile_data.get_label
-      self.init.compile(compile_data) + I[:label, test_target] +
-       self.test.expression.compile(compile_data) + I[:jumpz, end_target] +
-       self.body.compile(compile_data) + self.update.compile(compile_data) + I[:pop, 1] +
+      init.compile(compile_data) + I[:label, test_target] +
+       test.expression.compile(compile_data) + I[:jumpz, end_target] +
+       body.compile(compile_data) + update.compile(compile_data) + I[:pop, 1] +
        I[:jump, test_target] + I[:label, end_target]
     end
 
@@ -206,7 +211,7 @@ module CMachineGrammar
     # Just compile the body. The rest is taken care of by the parent node
     # which should always be a +Switch+ node.
 
-    def compile(compile_data); self.body.compile(compile_data); end
+    def compile(compile_data); body.compile(compile_data); end
 
   end
 
@@ -222,7 +227,9 @@ module CMachineGrammar
 
     def generate_binary_search_code(cases, labels, compile_data)
       if cases.length < 3
-        cases.map {|c| I[:dup] + I[:loadc, (c_val = c.case.value)] + I[:==] + I[:jumpnz, labels[c_val]]}.flatten
+        cases.map do |c|
+          I[:dup] + I[:loadc, (c_val = c.case.value)] + I[:==] + I[:jumpnz, labels[c_val]]
+        end.flatten
       else
         # mid top :less bottom
         midpoint, less_label = cases.length / 2, compile_data.get_label
@@ -238,16 +245,18 @@ module CMachineGrammar
     # We are going to use binary search to figure out which case statement to jump to.
     # First we sort the case statements and assign jump targets to each statement. Then we
     # generate the binary search for the cases and place it before the case blocks.
-    # Test Data: "switch (1) {\n  case 1: { 1; }\n  case 2: { 2; }\n  case 3: { 3; }\n  case 4: { 4; }\n  case 5: { 5; }\n  case 6: { 6; }\n  case 7: { 7; }\n  default: { 111; }\n}\n"
 
     def compile(compile_data)
+      # Sort and generate labels for the cases.
       default_label = compile_data.get_label
-      sorted_cases = self.cases.sort {|a, b| a.case.value <=> b.case.value}
+      sorted_cases = cases.sort {|a, b| a.case.value <=> b.case.value}
       labels = sorted_cases.reduce({}) {|m, c| m[c.case.value] = compile_data.get_label; m}
+      # Generate the binary search ladder.
       binary_search_sequence = generate_binary_search_code(sorted_cases, labels, compile_data)
-      (self.test.compile(compile_data) + binary_search_sequence + I[:jump, default_label] + sorted_cases.map {|c|
-        I[:label, labels[c.case.value]] + c.compile(compile_data)
-      } + I[:label, default_label] + self.default.compile(compile_data)).flatten
+      # Compile the test expression, attach the binary search ladder and the code for each case.
+      (test.compile(compile_data) + binary_search_sequence + I[:jump, default_label] +
+       sorted_cases.map {|c| I[:label, labels[c.case.value]] + c.compile(compile_data)} +
+       I[:label, default_label] + default.compile(compile_data)).flatten
     end
 
   end
@@ -257,7 +266,7 @@ module CMachineGrammar
     ##
     # s1 pop s2 pop s3 pop ... sn pop
 
-    def compile(compile_data); self.statements.map {|s| s.compile(compile_data)}.flatten; end
+    def compile(compile_data); statements.map {|s| s.compile(compile_data)}.flatten; end
 
   end
 
@@ -266,27 +275,92 @@ module CMachineGrammar
     ##
     # Pretty simple. Compile the expression and then pop.
 
-    def compile(compile_data); self.expression.compile(compile_data) + I[:pop, 1]; end
+    def compile(compile_data); expression.compile(compile_data) + I[:pop, 1]; end
 
   end
 
-  class IntType; end
+  # Base types.
+  class BaseType
+    def self.size(_); 1; end
+  end
 
-  class FloatType; end
+  class IntType < BaseType; end
 
-  class BoolType; end
+  class FloatType < BaseType; end
 
-  class VoidType; end
+  class BoolType < BaseType; end
 
-  class StructMember < Struct.new(:type, :name); end
+  class VoidType < BaseType
+    def size(_); 0; end
+  end
 
-  class StructDeclaration < Struct.new(:name, :members); end
+  # Semi-base types.
+  class ArrayType < Struct.new(:type, :count)
 
-  class DerivedType < Struct.new(:type); end
+    ##
+    # Size of an array is exactly what you'd expect it to be.
 
-  class PtrType < Struct.new(:type); end
+    def size(_); count * type.size(_); end
 
-  class ArrayType < Struct.new(:type, :count); end
+  end
+
+  class PtrType < Struct.new(:type)
+
+    ##
+    # Pointers are just integers and in our VM scheme they take up just 1 memory cell.
+
+    def size(_); 1; end
+
+  end
+
+  # Derived types.
+  class DerivedType < Struct.new(:name)
+
+    ##
+    # To figure out the size of a derived type we first have to look it up in the compilation
+    # context and return the size of whatever struct was declared by that name.
+
+    def size(compile_data); compile_data.structs[name].size(compile_data); end
+
+  end
+
+  class StructMember < Struct.new(:type, :name)
+
+    ##
+    # Size of a struct member is the size of the underlying type.
+
+    def size(compile_data); @size ||= type.size(compile_data); end
+
+  end
+
+  class StructDeclaration < Struct.new(:name, :members)
+
+    ##
+    # The offset for the struct members is exactly what you'd expect. It is the sum of all
+    # the members that are declared before that member.
+    
+    def offset(compile_data, member)
+      # TODO: Need to figure out what the best way is to compute and report errors.
+    end
+
+    ##
+    # The size of a declared struct is the sum of the sizes of all its members.
+
+    def size(compile_data)
+      @size ||= members.reduce(0) {|m, member| m + member.size(compile_data)}
+    end
+
+    ##
+    # Compiling struct declarations means putting information in a symbol table for the given struct.
+
+    def compile(compile_data)
+      if !compile_data.structs[name].nil?
+        raise StandardError, "A struct by the given name is already defined: #{name}."
+      end
+      compile_data.structs[name] = self
+    end
+
+  end
 
   class VariableDeclaration < Struct.new(:type, :variable, :value); end
 
