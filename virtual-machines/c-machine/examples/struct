@@ -3,3 +3,9 @@ struct Test {
   b : int;
   c : ptr(int);
 }
+
+struct AnotherTest {
+  a : int;
+  b : int;
+  st : ptr(Test);
+}
