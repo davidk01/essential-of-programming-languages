@@ -5,7 +5,7 @@ module CMachineGrammar
 
   ##
   # Arithmetic and order operations have a common structure when it comes to compiling them
-  # to stack operations so factor out that functionality.
+  # to stack operations. +OpReducers+ encapsulates that commonality.
 
   class OpReducers < Struct.new(:expressions)
 
@@ -13,7 +13,7 @@ module CMachineGrammar
     # e.g. :+, :-, :/, :*
 
     def reduce_with_operation(compile_data, operation)
-      expr = self.expressions.map {|e| e.compile(compile_data)}
+      expr = expressions.map {|e| e.compile(compile_data)}
       expr[0] + expr[1..-1].map {|e| e + I[operation]}.flatten
     end
 
@@ -35,7 +35,9 @@ module CMachineGrammar
   class CompileData
     attr_reader :structs
 
-    def initialize; @label_counter, @structs = -1, {}; end
+    def initialize
+      @label_counter, @structs = -1, {}
+    end
 
     def get_label; "label#{@label_counter += 1}".to_sym; end
 
@@ -291,7 +293,7 @@ module CMachineGrammar
   class BoolType < BaseType; end
 
   class VoidType < BaseType
-    def size(_); 0; end
+    def self.size(_); 0; end
   end
 
   # Semi-base types.
@@ -338,15 +340,12 @@ module CMachineGrammar
     ##
     # The offset for the struct members is exactly what you'd expect. It is the sum of all
     # the members that are declared before that member and this information is computed when
-    # we compute the total size of the struct because that information is available during the
-    # total size calculation.
+    # we compute the total size of the struct.
     
     def offset(compile_data, member)
       # Call size to instantiate +@offsets+ hash and then lookup the member in the hash.
       size(compile_data)
-      if (member_offset = @offsets[member]).nil?
-        raise StandardError, "Unknown struct member #{member} for struct #{name}."
-      end
+      raise StandardError, "Unknown struct member #{member} for struct #{name}." if (member_offset = @offsets[member]).nil?
       member_offset
     end
 
@@ -367,17 +366,36 @@ module CMachineGrammar
     # Compiling struct declarations means putting information in a symbol table for the given struct.
 
     def compile(compile_data)
-      if !compile_data.structs[name].nil?
-        raise StandardError, "A struct by the given name is already defined: #{name}."
-      end
+      raise StandardError, "A struct by the given name is already defined: #{name}." if !compile_data.structs[name].nil?
       compile_data.structs[name] = self
     end
 
   end
 
-  class VariableDeclaration < Struct.new(:type, :variable, :value); end
+  ##
+  # When a variable is declared it needs a memory location for storage. Compiling a variable declaration means
+  # allocating space on the stack for that variable. This is a little tricky because we also need to account
+  # for function calls so we need to be aware of which context the variable declaration is occuring.
 
-  class FunctionDefinition < Struct.new(:return_type, :name, :arguments, :body); end
+  class VariableDeclaration < Struct.new(:type, :variable, :value)
+
+    def compile(compile_data)
+    end
+
+  end
+
+  ##
+  # I'm not sure how to compile function definitions yet. Having a separate code stack for functions
+  # makes some sense. Instead of mushing it all together on a single stack we have a separate function code
+  # stack that just has functions. The main code segment is just for the main method and all function calls
+  # jump to the function stack and then return to the main code stack.
+
+  class FunctionDefinition < Struct.new(:return_type, :name, :arguments, :body)
+
+    def compile(compile_data)
+    end
+
+  end
 
   class ArgumentDefinition < Struct.new(:type, :name); end
 
