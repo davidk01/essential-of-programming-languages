@@ -35,8 +35,9 @@ module CMachineGrammar
   class CompileData
     attr_reader :structs
 
-    def initialize
+    def initialize(context = :main)
       @label_counter, @structs = -1, {}
+      @context, @variables = context, []
     end
 
     def get_label; "label#{@label_counter += 1}".to_sym; end
@@ -375,11 +376,21 @@ module CMachineGrammar
   ##
   # When a variable is declared it needs a memory location for storage. Compiling a variable declaration means
   # allocating space on the stack for that variable. This is a little tricky because we also need to account
-  # for function calls so we need to be aware of which context the variable declaration is occuring.
+  # for function calls so we need to know in which context the variable declaration is occuring.
+  # For the time being we are ignoring blocks and functions.
 
   class VariableDeclaration < Struct.new(:type, :variable, :value)
 
     def compile(compile_data)
+      variables = compile_data.variables
+      latest_declaration = variables.last
+      if latest_declaration.nil?
+        variable_data = [0, self]
+      else
+        stack_position = latest_declaration[0] + latest_declaration[1].type.size(compile_data)
+        variable_data = [stack_position, self]
+      end
+      variables.push(variable_data)
     end
 
   end
