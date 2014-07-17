@@ -33,7 +33,7 @@ module CMachineGrammar
   # VM code.
 
   class CompileData
-    attr_reader :structs
+    attr_reader :structs, :variables
 
     def initialize(context = :main)
       @label_counter, @structs = -1, {}

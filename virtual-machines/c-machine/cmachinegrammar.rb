@@ -198,7 +198,7 @@ module CMachineGrammar
     }
     
     # all the expressions
-    rule :expression, arithmetic_expression | unary_expression | number | function_call | var_assignment |
+    rule :expression, number | arithmetic_expression | unary_expression | function_call | var_assignment |
      identifier
 
     rule :start, r(:statements)

@@ -1,0 +1,23 @@
+struct BasicStruct {
+  a : int;
+  b : int;
+  c : ptr(int);
+}
+
+struct AnotherBasicStruct {
+  a : int;
+  b : int;
+  c : ptr(Test);
+}
+
+struct NonBasicStruct {
+  a : int;
+  b : array(int, 10);
+  c : BasicStruct;
+}
+
+a : int = 1;
+b : int = 2;
+c : BasicStruct;
+d : AnotherBasicStruct;
+e : NonBasicStruct;
