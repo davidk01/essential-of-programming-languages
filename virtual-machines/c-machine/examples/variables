@@ -21,3 +21,5 @@ b : int = 2;
 c : BasicStruct;
 d : AnotherBasicStruct;
 e : NonBasicStruct;
+
+a; b; c; d; e;

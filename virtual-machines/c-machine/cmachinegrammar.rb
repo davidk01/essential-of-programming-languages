@@ -26,7 +26,7 @@ module CMachineGrammar
     # Need to be careful with identifiers to not be overly restrictive but also to not eat up
     # other grammatical punctuations like type declarations, sequencing, function calls, etc.
     identifier = one_of(/[^\s\(\),;<{}\.\->:]/).many[:chars] >> ->(s) {
-      s[:chars].map(&:text).join
+      Identifier.new(s[:chars].map(&:text).join)
     }
 
     # <=, <, =, >, >=
@@ -88,7 +88,7 @@ module CMachineGrammar
     # need to wrap up an expression into a statement otherwise we are missing :pop operations
     # during compilation.
     expression_statement = (r(:expression) > ws > one_of(';').ignore)[:expression] >> ->(s) {
-      ExpressionStatement.new(s[:expression])
+      ExpressionStatement.new(s[:expression].first)
     }
 
     # for (e1; e2; e3) { s+ }

@@ -46,7 +46,25 @@ module CMachineGrammar
 
   # AST classes
 
-  class Identifier < Struct.new(:value); end
+  class Identifier < Struct.new(:value)
+
+    ##
+    # An identifier means we are accessing a variable. We first load the address of
+    # the variable and if it is composite type then we load m consecutive values.
+    # TODO: Encapsulate variable data into a struct to get rid of [0] and [1] indexing.
+
+    def compile(compile_data)
+      val = value
+      variable_data = compile_data.variables.select {|v| v[1].variable.value == val}.first
+      raise StandardError, "Undefined variable access: #{val}." unless variable_data
+      # Load the address of the variable and then load m consecutive values starting at
+      # that address where m is the size of the variable.
+      starting_address = variable_data[0]
+      variable_load_size = variable_data[1].type.size(compile_data)
+      I[:loada, starting_address, variable_load_size]
+    end
+
+  end
 
   class ConstExp < Struct.new(:value)
 
@@ -157,7 +175,8 @@ module CMachineGrammar
 
   end
 
-  class Assignment < Struct.new(:left, :right); end
+  class Assignment < Struct.new(:left, :right)
+  end
 
   class If < Struct.new(:test, :true_branch, :false_branch)
 
@@ -269,7 +288,9 @@ module CMachineGrammar
     ##
     # s1 pop s2 pop s3 pop ... sn pop
 
-    def compile(compile_data); statements.map {|s| s.compile(compile_data)}.flatten; end
+    def compile(compile_data)
+      statements.map {|s| s.compile(compile_data)}.flatten
+    end
 
   end
 
@@ -277,8 +298,12 @@ module CMachineGrammar
 
     ##
     # Pretty simple. Compile the expression and then pop.
+    # I'm not sure if a single pop is enough. What happens when we load
+    # a compound variable on top of the stack? (TODO: Figure this out.)
 
-    def compile(compile_data); expression.compile(compile_data) + I[:pop, 1]; end
+    def compile(compile_data)
+      expression.compile(compile_data) + I[:pop, 1]
+    end
 
   end
 
@@ -369,6 +394,7 @@ module CMachineGrammar
     def compile(compile_data)
       raise StandardError, "A struct by the given name is already defined: #{name}." if !compile_data.structs[name].nil?
       compile_data.structs[name] = self
+      []
     end
 
   end
@@ -391,6 +417,7 @@ module CMachineGrammar
         variable_data = [stack_position, self]
       end
       variables.push(variable_data)
+      []
     end
 
   end
@@ -408,10 +435,13 @@ module CMachineGrammar
 
   end
 
-  class ArgumentDefinition < Struct.new(:type, :name); end
+  class ArgumentDefinition < Struct.new(:type, :name)
+  end
 
-  class ReturnStatement < Struct.new(:return); end
+  class ReturnStatement < Struct.new(:return)
+  end
 
-  class FunctionCall < Struct.new(:name, :arguments); end
+  class FunctionCall < Struct.new(:name, :arguments)
+  end
 
 end

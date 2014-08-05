@@ -1,28 +1,33 @@
 require File.expand_path(File.dirname(__FILE__) + '/cmachinestack')
 
+##
 # The actual virtual machine class.
+
 class CMachine
 
+  ##
   # Need a convenient way to see all the instructions. Simple comment for the time being
-  # :label l
-  # :pop
-  # :loadc c
-  # :load c
-  # :store c
-  # :loada s c
-  # :storea s c
-  # :jump a
-  # :jumpz a
-  # :jumpnz a
-  # :jumpi a
-  # :dup
-  # :*, :/, :+, :-, :%
-  # :==, :!=, :<, :<=, :>, :>=
-  # :-@, :!
-  # :&, :|
+  # :label l (symbolic labels for jump instructions)
+  # :pop (decrement the stack pointer)
+  # :loadc c (push a constant on top of the stack)
+  # :load c (take the top of the stack and load c values from that address)
+  # :store c (take the top of the stack and store c values at that address)
+  # :loada s c (load c elements starting at s)
+  # :storea s c (store c elements starting at s)
+  # :jump a (jump to address a)
+  # :jumpz a (jump to address a if top of stack is 0)
+  # :jumpnz a (jump to address a if top of stack is not 0)
+  # :jumpi a (indexed jump takes top of stack and adds a to it and jumps to that address)
+  # :dup (duplicate top value on stack)
+  # :*, :/, :+, :-, :% (arithmetic instructions)
+  # :==, :!=, :<, :<=, :>, :>= (comparison instructions)
+  # :-@, :! (unary instructions)
+  # :&, :| (boolean instructions)
 
+  ##
   # An instruction is just a symbol along with any necessary arguments.
   # E.g. +Instruction.new(:loadc, [1])+
+
   class Instruction < Struct.new(:instruction, :arguments)
     def self.[](instruction, *arguments); [new(instruction, arguments)]; end
   end
@@ -32,17 +37,23 @@ class CMachine
 
   attr_reader :code, :stack, :pc, :ir
 
+  ##
   # Set up the initial stack and registers.
+  
   def initialize(c)
     @code, @stack, @pc, @ir = c, Stack.new, -1, nil
   end
 
+  ##
   # Retrieve next instruction and execute it.
+  
   def step
     @ir = @code[@pc += 1]; execute
   end
 
+  ##
   # Instruction dispatcher.
+  
   def execute
     case (sym = @ir.instruction)
     when :label
@@ -102,6 +113,9 @@ class CMachine
       raise StandardError, "Unrecognized operation: #{sym}."
     end
   end
+
+  ##
+  # Execute all the instructions in sequence.
 
   def run
     raise StandardError
