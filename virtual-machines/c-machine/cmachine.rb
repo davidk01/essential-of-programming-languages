@@ -14,6 +14,7 @@ class CMachine
   # :store c (take the top of the stack and store c values at that address)
   # :loada s c (load c elements starting at s)
   # :storea s c (store c elements starting at s)
+  # :initvar s l (initialize l zeroes starting at s)
   # :jump a (jump to address a)
   # :jumpz a (jump to address a if top of stack is 0)
   # :jumpnz a (jump to address a if top of stack is not 0)
@@ -57,6 +58,9 @@ class CMachine
   def execute
     case (sym = @ir.instruction)
     when :label
+    when :initvar
+      start, len = *@ir.arguments
+      (0...len).each {|i| @stack[start + i] = 0}
     when :pop
       @ir.arguments[0].times { result = @stack.pop }; result
     when :loadc

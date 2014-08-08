@@ -20,7 +20,7 @@ module CMachineGrammar
 
     # Numbers, e.g. 123, 123.544.
     number = (one_of(/\d/).many[:digits] > (one_of('.') > one_of(/\d/).many.any).any[:fraction]) >> ->(s) {
-      s[:digits].map(&:text).join.to_i + s[:fraction].map(&:text).join.to_f
+      Number.new(s[:digits].map(&:text).join.to_i + s[:fraction].map(&:text).join.to_f)
     }
 
     # Need to be careful with identifiers to not be overly restrictive but also to not eat up
@@ -137,7 +137,7 @@ module CMachineGrammar
     # typed variable declaration along with optional assignment (statement), e.g. int x, int x = 100.
     variable_declaration = (identifier[:variable] > ws > one_of(':') > ws > r(:type_expression)[:type] >
      ws > (one_of('=').ignore > cut! > ws > r(:expression)).any[:value] > one_of(';')) >> ->(s) {
-      VariableDeclaration.new(s[:type], s[:variable], s[:value])
+      VariableDeclaration.new(s[:type], s[:variable], s[:value].first)
     }
 
     # type variable_name, e.g. var : type, x : ptr(int), x : array(int, 10)

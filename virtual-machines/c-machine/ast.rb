@@ -49,9 +49,8 @@ module CMachineGrammar
   class Identifier < Struct.new(:value)
 
     ##
-    # An identifier means we are accessing a variable. We first load the address of
-    # the variable and if it is composite type then we load m consecutive values.
-    # TODO: Encapsulate variable data into a struct to get rid of [0] and [1] indexing.
+    # An identifier means we are accessing a variable. So we just load its address on
+    # top of stack.
 
     def compile(compile_data)
       val = value
@@ -60,8 +59,7 @@ module CMachineGrammar
       # Load the address of the variable and then load m consecutive values starting at
       # that address where m is the size of the variable.
       starting_address = variable_data[0]
-      variable_load_size = variable_data[1].type.size(compile_data)
-      I[:loada, starting_address, variable_load_size]
+      I[:loadc, starting_address]
     end
 
   end
@@ -74,6 +72,15 @@ module CMachineGrammar
 
     def compile(_); I[:loadc, value]; end
 
+  end
+
+  ##
+  # Holds numeric values. Compiling just means loading the constant.
+
+  class Number < Struct.new(:value)
+    def compile(_)
+      I[:loadc, value]
+    end
   end
 
   class DiffExp < OpReducers
@@ -328,7 +335,7 @@ module CMachineGrammar
     ##
     # Size of an array is exactly what you'd expect it to be.
 
-    def size(_); count * type.size(_); end
+    def size(_); count.value * type.size(_); end
 
   end
 
@@ -417,7 +424,10 @@ module CMachineGrammar
         variable_data = [stack_position, self]
       end
       variables.push(variable_data)
-      []
+      variable_initialization = I[:initvar, variable_data[0], type.size(compile_data)]
+      variable_assignment = value ?
+       value.compile(compile_data) + I[:storea, variable_data[0], 1] : []
+      variable_initialization + variable_assignment
     end
 
   end
