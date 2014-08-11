@@ -1,6 +1,9 @@
 #!/usr/bin/env ruby
 require_relative './cmachinegrammar'
+require_relative './cmachine'
 require 'pp'
 
-pp (ast = CMachineGrammar.parse(File.read(ARGV[0])))
+ast = CMachineGrammar.parse(File.read(ARGV[0]))
+code = ast.compile(CMachineGrammar::CompileData.new)
+machine = CMachine.new(code)
 require 'pry'; binding.pry

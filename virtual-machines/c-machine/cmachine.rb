@@ -49,19 +49,22 @@ class CMachine
   # Retrieve next instruction and execute it.
   
   def step
-    @ir = @code[@pc += 1]; execute
+    @ir = @code[@pc += 1]
+    execute
   end
 
   ##
   # Instruction dispatcher.
   
   def execute
-    case (sym = @ir.instruction)
+    case (sym = (@ir || Instruction.new(:noop, [])).instruction)
     when :label
+    when :noop
     when :initvar
       len = @ir.arguments[0]
-      @stack.push([0] * len)
+      @stack.push(*[0] * len)
     when :pop
+      result = nil
       @ir.arguments[0].times { result = @stack.pop }
       result
     when :loadc
@@ -124,7 +127,8 @@ class CMachine
   # Execute all the instructions in sequence.
 
   def run
-    raise StandardError
+    step if @pc == -1
+    step while @ir
   end
 
 end
