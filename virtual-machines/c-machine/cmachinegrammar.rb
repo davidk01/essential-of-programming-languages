@@ -128,7 +128,7 @@ module CMachineGrammar
     # array type, e.g. array(int, 10), array(ptr(int), 10)
     array_type = (m('array(') > ws > r(:type_expression)[:type] > ws > one_of(',') >
      ws > number[:count] > ws > one_of(')')) >> ->(s) {
-      ArrayType.new(s[:type], s[:count].to_i)
+      ArrayType.new(s[:type], s[:count])
     }
 
     # type expression
