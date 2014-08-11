@@ -424,7 +424,7 @@ module CMachineGrammar
         variable_data = [stack_position, self]
       end
       variables.push(variable_data)
-      variable_initialization = I[:initvar, variable_data[0], type.size(compile_data)]
+      variable_initialization = I[:initvar, type.size(compile_data)]
       variable_assignment = value ?
        value.compile(compile_data) + I[:storea, variable_data[0], 1] : []
       variable_initialization + variable_assignment

@@ -59,10 +59,11 @@ class CMachine
     case (sym = @ir.instruction)
     when :label
     when :initvar
-      start, len = *@ir.arguments
-      (0...len).each {|i| @stack[start + i] = 0}
+      len = @ir.arguments[0]
+      @stack.push([0] * len)
     when :pop
-      @ir.arguments[0].times { result = @stack.pop }; result
+      @ir.arguments[0].times { result = @stack.pop }
+      result
     when :loadc
       @stack.push(@ir.arguments[0])
     when :load
