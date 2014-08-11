@@ -84,9 +84,10 @@ class CMachine
       end
     when :storea
       ending = @ir.arguments[0] + (count = @ir.arguments[1]) - 1
-      address = @stack.sp
+      top_address = @stack.sp
       (0...count).each do |i|
-        @stack[ending - i] = @stack[address - i]
+        value = @stack[top_address - i]
+        @stack[ending - i] = value
       end
     when :jump
       @pc = @ir.arguments[0]
