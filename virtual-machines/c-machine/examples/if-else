@@ -1,9 +1,6 @@
-main() -> int {
-  x : int = 1;
-  y : bool;
-  if (x) {
-    return 1;
-  } else {
-    return 2;
-  }
+y : bool = 1;
+if (y) {
+  x : int = 2;
+} else {
+  z : int = 3;
 }

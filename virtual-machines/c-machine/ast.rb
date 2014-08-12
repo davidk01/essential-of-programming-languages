@@ -33,14 +33,94 @@ module CMachineGrammar
   # VM code.
 
   class CompileData
-    attr_reader :structs, :variables
 
-    def initialize(context = :main)
+    def initialize(outer_context = nil)
       @label_counter, @structs = -1, {}
-      @context, @variables = context, []
+      @outer_context, @variables = outer_context, []
     end
 
-    def get_label; "label#{@label_counter += 1}".to_sym; end
+    ##
+    # Struct declarations are going to be global for the time being so we recurse to the root
+    # context.
+
+    def assign_struct_data(name, data)
+      if @outer_context
+        return @outer_context.assign_struct_data(name, data)
+      end
+      @structs[name] = data
+    end
+
+    ##
+    # We assign only to the global context so we have to retrieve from the global context as
+    # well.
+
+    def get_struct_data(name)
+      if @outer_context
+        return @outer_context.get_struct_data(name)
+      end
+      @structs[name]
+    end
+
+    ##
+    # This one is pretty simple. Start from the back and go until we find a variable that
+    # matches in the current context. If we can't find it in current context then keep looking
+    # in outer context.
+
+    def get_variable_data(name)
+      i = 0
+      while (data = @variables[i -= 1])
+        if data.name == name
+          return data
+        end
+      end
+      if @outer_context
+        return @outer_context.get_variable_data(name)
+      end
+      raise StandardError, "Could not find a variable by that name: #{name}."
+    end
+
+    ##
+    # Adding a variable can be a little tricky because we need to figure out offsets which
+    # depends on sizes of already declared variables but this is handled in the compile method
+    # so we don't have to worry about it here.
+
+    def add_variable(data)
+      @variables.push(data)
+    end
+
+    ##
+    # See if there is anything in the current context. If not then see if there is an outer context
+    # and return that. Otherwise return nil.
+
+    def latest_declaration
+      if (v = @variables[-1])
+        return v
+      end
+      if @outer_context
+        return @outer_context.latest_declaration
+      end
+      nil
+    end
+
+    ##
+    # When getting a new label we want to go all the way to the root context because
+    # we want generated labels to be unique.
+
+    def get_label
+      if @outer_context
+        return @outer_context.get_label
+      end
+      "label#{@label_counter += 1}".to_sym
+    end
+
+    ##
+    # Incrementing means we are entering a new block which means we have to be careful with
+    # how we do variable lookup and declaration when it comes to assigning the variables stack
+    # addresses.
+
+    def increment
+      self.class.new(self)
+    end
 
   end
 
@@ -53,13 +133,10 @@ module CMachineGrammar
     # top of stack.
 
     def compile(compile_data)
-      val = value
-      variable_data = compile_data.variables.select {|v| v[1].variable.value == val}.first
+      variable_data = compile_data.get_variable_data(value)
       raise StandardError, "Undefined variable access: #{val}." unless variable_data
-      # Load the address of the variable and then load m consecutive values starting at
-      # that address where m is the size of the variable.
-      starting_address = variable_data[0]
-      I[:loadc, starting_address]
+      starting_address = variable_data.offset
+      I[:loadc, variable_data.offset]
     end
 
   end
@@ -196,8 +273,8 @@ module CMachineGrammar
     def compile(compile_data)
       else_target, end_target = compile_data.get_label, compile_data.get_label
       test.compile(compile_data) + I[:jumpz, else_target] +
-       true_branch.compile(compile_data) + I[:jump, end_target] + I[:label, else_target] +
-       false_branch.compile(compile_data) + I[:label, end_target]
+       true_branch.compile(compile_data.increment) + I[:jump, end_target] + I[:label, else_target] +
+       false_branch.compile(compile_data.increment) + I[:label, end_target]
     end
 
   end
@@ -348,14 +425,16 @@ module CMachineGrammar
 
   end
 
+  ##
   # Derived types.
+
   class DerivedType < Struct.new(:name)
 
     ##
     # To figure out the size of a derived type we first have to look it up in the compilation
     # context and return the size of whatever struct was declared by that name.
 
-    def size(compile_data); compile_data.structs[name].size(compile_data); end
+    def size(compile_data); compile_data.get_struct_data(name).size(compile_data); end
 
   end
 
@@ -378,7 +457,9 @@ module CMachineGrammar
     def offset(compile_data, member)
       # Call size to instantiate +@offsets+ hash and then lookup the member in the hash.
       size(compile_data)
-      raise StandardError, "Unknown struct member #{member} for struct #{name}." if (member_offset = @offsets[member]).nil?
+      if (member_offset = @offsets[member]).nil?
+        raise StandardError, "Unknown struct member #{member} for struct #{name}."
+      end
       member_offset
     end
 
@@ -399,8 +480,10 @@ module CMachineGrammar
     # Compiling struct declarations means putting information in a symbol table for the given struct.
 
     def compile(compile_data)
-      raise StandardError, "A struct by the given name is already defined: #{name}." if !compile_data.structs[name].nil?
-      compile_data.structs[name] = self
+      if !compile_data.get_struct_data(name).nil?
+        raise StandardError, "A struct by the given name is already defined: #{name}."
+      end
+      compile_data.assign_struct_data(name, self)
       []
     end
 
@@ -414,19 +497,30 @@ module CMachineGrammar
 
   class VariableDeclaration < Struct.new(:type, :variable, :value)
 
-    def compile(compile_data)
-      variables = compile_data.variables
-      latest_declaration = variables.last
-      if latest_declaration.nil?
-        variable_data = [0, self]
-      else
-        stack_position = latest_declaration[0] + latest_declaration[1].type.size(compile_data)
-        variable_data = [stack_position, self]
+    class VariableData < Struct.new(:declaration, :offset)
+
+      def size(compile_data)
+        declaration.type.size(compile_data)
       end
-      variables.push(variable_data)
+
+      def name
+        declaration.variable.value
+      end
+
+    end
+
+    def compile(compile_data)
+      latest_declaration = compile_data.latest_declaration
+      if latest_declaration.nil?
+        variable_data = VariableData.new(self, 0)
+      else
+        offset = latest_declaration.offset + latest_declaration.size(compile_data)
+        variable_data = VariableData.new(self, offset)
+      end
+      compile_data.add_variable(variable_data)
       variable_initialization = I[:initvar, type.size(compile_data).to_i]
       variable_assignment = value ?
-       value.compile(compile_data) + I[:storea, variable_data[0], 1] + I[:pop, 1] : []
+       value.compile(compile_data) + I[:storea, variable_data.offset, 1] + I[:pop, 1] : []
       variable_initialization + variable_assignment
     end
 
