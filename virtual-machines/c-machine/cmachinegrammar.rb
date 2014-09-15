@@ -11,31 +11,32 @@ module CMachineGrammar
 
     # There is a common structure to expressions of the form {op}(expr {, expr}+) so we
     # can map "op" to a class as soon as we see it.
-    operator_class_mapping = {'-' => DiffExp, '+' => AddExp, '*' => MultExp, '/' => DivExp,
-     '<' => LessExp, '<=' => LessEqExp, '=' => EqExp, '>' => GreaterExp, '>=' => GreaterEqExp,
-     'not' => NotExp, 'neg' => NegExp}
+    operator_class_mapping = {'-' => DiffExp, '+' => AddExp, '*' => MultExp, '/' => DivExp, '%' => ModExp,
+     '<<' => LeftShift, '>>' => RightShift, '<' => LessExp, '<=' => LessEqExp, '==' => EqExp, '&&' => AndExp,
+     '>' => GreaterExp, '>=' => GreaterEqExp, '||' => OrExp, 'not' => NotExp, 'neg' => NegExp}
 
     # Whitespace and separators.
     ws, sep = one_of(/\s/).many.any.ignore, one_of(/\s/).many.ignore
 
     # Numbers, e.g. 123, 123.544.
     number = (one_of(/\d/).many[:digits] > (one_of('.') > one_of(/\d/).many.any).any[:fraction]) >> ->(s) {
-      Number.new(s[:digits].map(&:text).join.to_i + s[:fraction].map(&:text).join.to_f)
+      Number.new(s[:digits].map(&:text).join.to_i + ((frac = s[:fraction]).any? ? frac.map(&:text).join.to_f : 0))
     }
 
     # Need to be careful with identifiers to not be overly restrictive but also to not eat up
     # other grammatical punctuations like type declarations, sequencing, function calls, etc.
-    identifier = one_of(/[^\s\(\),;<{}\.\->:]/).many[:chars] >> ->(s) {
+    identifier = one_of(/[^\s\(\),;=<\{\}\.\->:\+\*\%]/).many[:chars] >> ->(s) {
       Identifier.new(s[:chars].map(&:text).join)
     }
 
     # <=, <, =, >, >=
-    order_operator = ((m('<=') | m('>=') | one_of('<', '=', '>'))[:operator] > cut!) >> ->(s) {
+    order_operator = ((m('<=') | m('>=') | one_of('<', '==', '>'))[:operator] > cut!) >> ->(s) {
       operator_class_mapping[s[:operator].text]
     }
 
-    # -, +, *, /
-    arithmetic_operator = (one_of('-', '+', '*', '/')[:operator] > cut!) >> ->(s) {
+    # -, +, *, /, %, <<, >>, ==, &&, ||
+    arithmetic_operator = ((one_of('-', '+', '*', '/', '%') | m('<<') |
+     m('>>') | m('==') | m('&&') | m('||'))[:operator] > cut!) >> ->(s) {
       operator_class_mapping[s[:operator].text]
     }
 
@@ -48,20 +49,20 @@ module CMachineGrammar
     }
 
     # {not, neg}(expr)
-    unary_expression = (unary_operator[:op] > one_of('(') > cut! > ws > r(:expression)[:expression] >
-     ws > one_of(')') > cut!) >> ->(s) {
+    unary_expression = (unary_operator[:op] > one_of('(') > cut! > ws >
+     r(:expression)[:expression] > ws > one_of(')') > cut!) >> ->(s) {
       s[:op].new(s[:expression])
     }
 
     # op(expr {, expr}+)
     arithmetic_expression = (general_arithmetic_operator[:op] > one_of('(') > ws > cut! >
-     r(:expression)[:first] > (ws > one_of(',').ignore > ws > cut! > r(:expression)).many[:rest] >
-     ws > one_of(')') > cut!) >> ->(s) {
+     r(:expression)[:first] > (ws > one_of(',').ignore > ws > cut! >
+     r(:expression)).many[:rest] > ws > one_of(')') > cut!) >> ->(s) {
       s[:op].new([s[:first]] + s[:rest].flatten)
     }
 
     # x = expression; (statement)
-    var_assignment = (identifier[:var] > ws > m('=') > cut! > ws > r(:expression)[:expr]) >> ->(s) {
+    var_assignment = (identifier[:var] > ws > m('=') > cut! > ws > r(:expression)[:expr] > ws > one_of(';')) >> ->(s) {
       Assignment.new(s[:var], s[:expr])
     }
     
@@ -114,7 +115,7 @@ module CMachineGrammar
     # ;
     empty_statement = ws > one_of(';').ignore
 
-    # Basic types (not an expression or a statement), e.g. int, float.
+    # Basic types (not an expression or a statement), e.g. int, float, bool, void.
     basic_type_mapping = {'int' => IntType, 'float' => FloatType, 'bool' => BoolType, 'void' => VoidType}
     basic_type = ((m('int') | m('float') | m('bool'))[:basic] | identifier[:derived]) >> ->(s) {
       s[:basic] ? basic_type_mapping[s[:basic].text] : DerivedType.new(s[:derived])
@@ -134,7 +135,7 @@ module CMachineGrammar
     # type expression
     rule :type_expression, ptr_type | array_type | basic_type
 
-    # typed variable declaration along with optional assignment (statement), e.g. int x, int x = 100.
+    # typed variable declaration along with optional assignment (statement), e.g. x : int, x : int = 100.
     variable_declaration = (identifier[:variable] > ws > one_of(':') > ws > r(:type_expression)[:type] >
      ws > (one_of('=').ignore > cut! > ws > r(:expression)).any[:value] > one_of(';')) >> ->(s) {
       VariableDeclaration.new(s[:type], s[:variable], s[:value].first)
@@ -151,9 +152,9 @@ module CMachineGrammar
       [s[:first]] + s[:rest]
     }
 
-    # function_name({type arg}*) -> return_type { statments* } (statement), e.g. func(x : int, y : int) -> array(int, 2) { ... }
+    # function_name({type arg}*) : return_type { statments* } (statement), e.g. func(x : int, y : int) : array(int, 2) { ... }
     function_definition = (identifier[:function_name] > ws > one_of('(') > function_arguments.any[:arguments] >
-     one_of(')') > ws > m('->') > ws > r(:type_expression)[:return_type] > ws > statement_block[:function_body] >
+     one_of(')') > ws > one_of(':') > ws > r(:type_expression)[:return_type] > ws > statement_block[:function_body] >
      cut!) >> ->(s) {
       FunctionDefinition.new(s[:return_type], s[:function_name], s[:arguments], s[:function_body])
     }
@@ -175,6 +176,11 @@ module CMachineGrammar
       ReturnStatement.new(s[:return])
     }
 
+    # jump statements, e.g. continue, break (not doing goto for now)
+    jump_statement = ((m('continue') | m('break'))[:jump_statement] > ws > one_of(';')) >> ->(s) {
+      s[:jump_statement].text === 'continue' ? Continue : Break
+    }
+
     # {var : type;}, e.g. xyz : ptr(int);
     struct_member = (identifier[:name] > ws > one_of(':') > ws > r(:type_expression)[:type] >
      ws > one_of(';')) >> ->(s) {
@@ -187,9 +193,14 @@ module CMachineGrammar
       StructDeclaration.new(s[:name], s[:members].flatten)
     }
 
+    # array_name[index], array_name[expression]
+    array_indexer = identifier[:array_name] > one_of('[') > ws > r(:expression)[:index] > ws > one_of(']') >> ->(s) {
+      ArrayIndexer.new(s[:array_name], s[:index])
+    }
+
     # all the statements
-    rule :statement, function_definition | return_statement | if_statement | while_statement | 
-     for_statement | switch_statement | variable_declaration | struct_declaration |
+    rule :statement, function_definition | return_statement | jump_statement | if_statement | while_statement | 
+     for_statement | switch_statement | variable_declaration | var_assignment | struct_declaration |
      expression_statement | statement_block | empty_statement
 
     # expr; {expr;}*
@@ -198,8 +209,8 @@ module CMachineGrammar
     }
     
     # all the expressions
-    rule :expression, number | arithmetic_expression | unary_expression | function_call | var_assignment |
-     identifier
+    rule :expression, number | arithmetic_expression | unary_expression | function_call |
+     array_indexer | identifier
 
     rule :start, r(:statements)
 
