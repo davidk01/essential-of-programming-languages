@@ -179,6 +179,33 @@ module CMachineGrammar
 
   end
 
+  class ModExp < OpReducers
+
+    ##
+    # Might need to re-think this since repeated modulo operation doesn't make much sense.
+    
+    def compile(compile_data); reduce_with_operation(compile_data, :%); end
+
+  end
+
+  class LeftShift < OpReducers
+
+    ##
+    # Same as above.
+
+    def compile(compile_data); reduce_with_operation(compile_data, :<<); end
+
+  end
+
+  class RightShift < OpReducers
+
+    ##
+    # Same as above.
+
+    def compile(compile_data); reduce_with_operation(compile_data, :>>); end
+
+  end
+
   class MultExp < OpReducers
 
     ##
@@ -193,6 +220,18 @@ module CMachineGrammar
     # Same as above.
 
     def compile(compile_data); reduce_with_operation(compile_data, :/); end
+
+  end
+
+  class AndExp < OpReducers
+
+    def compile(compile_data); reduce_with_operation(compile_data, :&); end
+
+  end
+
+  class OrExp < OpReducers
+
+    def compile(compile_data); reduce_with_operation(compile_data, :|); end
 
   end
 

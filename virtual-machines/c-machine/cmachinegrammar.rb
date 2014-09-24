@@ -12,8 +12,8 @@ module CMachineGrammar
     # There is a common structure to expressions of the form {op}(expr {, expr}+) so we
     # can map "op" to a class as soon as we see it.
     operator_class_mapping = {'-' => DiffExp, '+' => AddExp, '*' => MultExp, '/' => DivExp, '%' => ModExp,
-     '<<' => LeftShift, '>>' => RightShift, '<' => LessExp, '<=' => LessEqExp, '==' => EqExp, '&&' => AndExp,
-     '>' => GreaterExp, '>=' => GreaterEqExp, '||' => OrExp, 'not' => NotExp, 'neg' => NegExp}
+     '<<' => LeftShift, '>>' => RightShift, '<' => LessExp, '<=' => LessEqExp, '==' => EqExp, '&' => AndExp,
+     '>' => GreaterExp, '>=' => GreaterEqExp, '|' => OrExp, 'not' => NotExp, 'neg' => NegExp}
 
     # Whitespace and separators.
     ws, sep = one_of(/\s/).many.any.ignore, one_of(/\s/).many.ignore
