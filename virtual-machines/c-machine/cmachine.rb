@@ -6,12 +6,16 @@ require File.expand_path(File.dirname(__FILE__) + '/cmachinestack')
 class CMachine
 
   ##
+  # It is important to distinguish between absolute loads and stores and relative loads and
+  # stores.
+
+  ##
   # Need a convenient way to see all the instructions. Simple comment for the time being
   # :label l (symbolic labels for jump instructions)
   # :pop (decrement the stack pointer)
   # :loadc c (push a constant on top of the stack)
-  # :load c (take the top of the stack and load c values from that address)
-  # :store c (take the top of the stack and store c values at that address)
+  # :load c (take the top of the stack as a starting address and load c values from it)
+  # :store c (take the top of the stack as a starting address and store c values to it)
   # :loada s c (load c elements starting at s)
   # :storea s c (store c elements starting at s)
   # :initvar s l (initialize l zeroes starting at s)
@@ -23,7 +27,7 @@ class CMachine
   # :*, :/, :+, :-, :% (arithmetic instructions)
   # :==, :!=, :<, :<=, :>, :>= (comparison instructions)
   # :-@, :! (unary instructions)
-  # :&, :| (boolean instructions)
+  # :&, :| (boolean/bitwise instructions)
 
   ##
   # An instruction is just a symbol along with any necessary arguments.

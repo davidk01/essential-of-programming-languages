@@ -1,0 +1,9 @@
+func_a(input : int) : int {
+  local : int = input;
+  return local;
+}
+
+main() : int {
+  local : int = 5;
+  return func_a(local);
+}
