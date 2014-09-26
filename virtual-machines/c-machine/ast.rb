@@ -35,14 +35,14 @@ module CMachineGrammar
   class Identifier < Struct.new(:value)
 
     ##
-    # An identifier means we are accessing a variable. So we just load its address on
-    # top of stack.
+    # An identifier means we are accessing a variable. So we load the value of the variable
+    # on the stack through its address.
 
     def compile(compile_data)
       variable_data = compile_data.get_variable_data(value)
       raise StandardError, "Undefined variable access: #{val}." unless variable_data
       starting_address = variable_data.offset
-      I[:loadc, variable_data.offset]
+      I[:loada, variable_data.offset, variable_data.size(compile_data)]
     end
 
   end
@@ -435,14 +435,16 @@ module CMachineGrammar
   end
 
   ##
-  # When a variable is declared it needs a memory location for storage. Compiling a variable declaration means
-  # allocating space on the stack for that variable. This is a little tricky because we also need to account
-  # for function calls so we need to know in which context the variable declaration is occuring.
-  # For the time being we are ignoring blocks and functions.
+  # TODO: I need to explain this better as well because there might be a bug or two lurking in there.
 
   class VariableDeclaration < Struct.new(:type, :variable, :value)
 
     class VariableData < Struct.new(:declaration, :offset)
+
+      ##
+      # We need to pass in +compile_data+ because in order to determine the size of a type
+      # we need to look up other types. This means there is an infinite loop lurking here
+      # if two types refer to each other.
 
       def size(compile_data)
         declaration.type.size(compile_data)
@@ -473,25 +475,46 @@ module CMachineGrammar
 
   ##
   # Generate a label that marks the beginning of the function so that function calls can
-  # jump to the code.
+  # jump to the code. TODO: Write a blog post explaining how this all works because I'm still
+  # not sure how it is supposed to work.
+
+  # Notes: The arguments are already meant to be on the stack set up by whoever has called us
+  # this means I need to augment the context and treat each argument as a variable declaration.
 
   class FunctionDefinition < Struct.new(:return_type, :name, :arguments, :body)
 
     def compile(compile_data)
-      # Stash a reference to this function in the compilation context because we will
-      # need to refer to it when we encounter function calls.
       compile_data.save_function_definition(self)
-      # Now we can start compiling the body. We need to be careful with how we deal with
-      # accessing function parameters.
-      I[:label, name.value]
+      function_context = compile_data.increment
+      arguments.each {|arg_def| arg_def.compile(function_context)}
+      I[:label, name.value] + body.compile(function_context)
     end
 
   end
 
+  ##
+  # We treat argument definitions as phantom variable declarations during compilation.
+  # What I mean by phantom is that we update the compilation context but we do not output
+  # any actual bytecode.
+
   class ArgumentDefinition < Struct.new(:type, :name)
+    
+    def compile(compile_data)
+      VariableDeclaration.new(type, name, nil).compile(compile_data)
+    end
+
   end
 
+  ##
+  # Notes: No idea how this is supposed to work either. Trying to avoid frame pointers seems
+  # like a lot of hassle.
+
   class ReturnStatement < Struct.new(:return)
+  
+    def compile(compile_data)
+      
+    end
+
   end
 
   class FunctionCall < Struct.new(:name, :arguments)

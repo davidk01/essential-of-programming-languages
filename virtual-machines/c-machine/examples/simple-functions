@@ -1,9 +1,9 @@
-func_a(input : int) : int {
+func_a(input : int, phantom : int) : int {
   local : int = input;
-  return local;
+  return +(local, phantom);
 }
 
 main() : int {
   local : int = 5;
-  return func_a(local);
+  return func_a(local, local);
 }

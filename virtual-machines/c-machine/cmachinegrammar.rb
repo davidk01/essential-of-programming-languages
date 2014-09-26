@@ -148,8 +148,8 @@ module CMachineGrammar
 
     # type var1 {, type var2}*, e.g. (x : int, y : int, z : ptr(int))
     function_arguments = (function_definition_argument[:first] > (ws >
-     one_of(',').ignore > cut! > function_definition_argument).many.any[:rest]) >> ->(s) {
-      [s[:first]] + s[:rest]
+     one_of(',').ignore > ws > cut! > function_definition_argument).many.any[:rest]) >> ->(s) {
+      [s[:first]] + s[:rest].flatten
     }
 
     # function_name({type arg}*) : return_type { statments* } (statement), e.g. func(x : int, y : int) : array(int, 2) { ... }
@@ -160,9 +160,9 @@ module CMachineGrammar
     }
 
     # arguments {expr,}*, e.g. (x, y, z, +(x, y))
-    function_call_arguments = (r(:expression)[:first] > (ws > one_of(',').ignore > cut! >
+    function_call_arguments = (r(:expression)[:first] > (ws > one_of(',').ignore > ws > cut! >
      r(:expression)).many.any[:rest]) >> ->(s) {
-      [s[:first]] + s[:rest]
+      [s[:first]] + s[:rest].flatten
     }
 
     # function_name({expressions}*), e.g. f(1, 2, 3, +(4, 5))
