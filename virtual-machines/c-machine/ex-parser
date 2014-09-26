@@ -4,7 +4,6 @@ require_relative './cmachine'
 require 'pp'
 
 source = File.read(ARGV[0])
-require 'pry'; binding.pry
 ast = CMachineGrammar.parse(source)
 context = CMachineGrammar::CompileData.new
 code = ast.compile(context)

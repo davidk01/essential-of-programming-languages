@@ -13,11 +13,13 @@ class CMachine
   # Need a convenient way to see all the instructions. Simple comment for the time being
   # :label l (symbolic labels for jump instructions)
   # :pop (decrement the stack pointer)
-  # :pushstack (add another stack on top of the current one for a function call)
+  # :pushstack k (add another stack on top of the current one for a function call and move k values
+  #               from the current stack to the new one)
   # :popstack (remove the context that was used for a function call and save anything that is left
   #            on the previous stack)
   # :decimate k (destroy everything on the stack except the first k values)
-  # :call label (call a function by jumping to the given label/address)
+  # :call label (call a function by jumping to the given label/address after saving @pc)
+  # :return (jump back to a saved @pc)
   # :loadc c (push a constant on top of the stack)
   # :load c (take the top of the stack as a starting address and load c values from it)
   # :store c (take the top of the stack as a starting address and store c values to it)
@@ -51,7 +53,8 @@ class CMachine
   # Set up the initial stack and registers.
   
   def initialize(c)
-    @code, @stack, @pc, @ir = c, Stack.new, -1, nil
+    @code, @stack, @pc, @ir, @return = c + Instruction[:call, 'main'],
+     Stack.new, c.length - 1, nil, []
   end
 
   ##
@@ -66,9 +69,38 @@ class CMachine
   # Instruction dispatcher.
   
   def execute
+    # Debugging output.
+    puts "Counter: #@pc."
+    puts "Return: #{@return.map(&:to_s).join(', ')}."
+    puts "Instruction: #@ir."
+    puts "Stack: #{@stack.to_s}."
+    #########
     case (sym = (@ir || Instruction.new(:noop, [])).instruction)
     when :label
     when :noop
+    when :pushstack
+      pop_count, accumulator = @ir.arguments[0], []
+      pop_count.times { accumulator.push(@stack.pop) }
+      new_stack = @stack.increment
+      new_stack.push(*accumulator.reverse)
+      @stack = new_stack
+    when :decimate
+      (@stack.store.length - @ir.arguments[0]).times { @stack.pop }
+    when :popstack
+      parent = @stack.parent
+      parent.push(*@stack.store)
+      @stack = parent
+    when :return
+      @pc = @return.pop
+    when :call
+      label = @ir.arguments[0]
+      @return.push(@pc)
+      @code.each_with_index do |instr, index|
+        if :label == instr.instruction && label == instr.arguments[0]
+          return @pc = index
+        end
+      end
+      raise StandardError, "Unknown label: #{label}."
     when :initvar
       len = @ir.arguments[0]
       @stack.push(*[0] * len)
@@ -136,8 +168,7 @@ class CMachine
   # Execute all the instructions in sequence.
 
   def run
-    step if @pc == -1
-    step while @ir
+    step; step while @ir
   end
 
 end

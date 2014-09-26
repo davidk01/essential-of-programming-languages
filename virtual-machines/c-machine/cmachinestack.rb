@@ -1,8 +1,18 @@
 # We need to keep track of the top of the stack so
 # encapsulate that logic in one place to make sure the invariant is enforced.
-class Stack < Struct.new(:store, :sp)
+class Stack < Struct.new(:store, :sp, :parent)
+
   def initialize
-    super([], -1)
+    super([], -1, nil)
+  end
+
+  def to_s
+    current = store.map(&:to_s).join(', ')
+    if parent
+      parent.to_s + " | " + current
+    else
+      current
+    end
   end
 
   def pop
@@ -26,4 +36,14 @@ class Stack < Struct.new(:store, :sp)
   def top_value
     self.store[-1]
   end
+
+  def increment
+    (new_scope = Stack.new).parent = self
+    new_scope
+  end
+
+  def decrement
+    parent
+  end
+
 end

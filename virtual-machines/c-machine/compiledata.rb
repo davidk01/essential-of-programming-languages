@@ -27,6 +27,17 @@ module CMachineGrammar
     end
 
     ##
+    # TODO: This is turning into a real mess. The context is starting to handle
+    # way too much.
+
+    def function_arguments_size(function_name)
+      if @outer_context
+        return @outer_context.function_arguments_size(function_name)
+      end
+      @functions[function_name].arguments_size(self)
+    end
+
+    ##
     # You might wonder why we don't calculate the size when we save the function. I don't
     # have a good reason for not calculating the size during saving. TODO: Fix this.
 

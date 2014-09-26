@@ -492,6 +492,10 @@ module CMachineGrammar
       I[:label, name.value] + body.compile(function_context)
     end
 
+    def arguments_size(compile_data)
+      arguments.reduce(0) {|m, arg| m + arg.type.size(compile_data)}
+    end
+
   end
 
   ##
@@ -516,8 +520,7 @@ module CMachineGrammar
     def compile(compile_data)
       return_expression.compile(compile_data) +
        I[:storea, 0, (return_size = compile_data.return_size(compile_data))] +
-       I[:decimate, return_size] +
-       I[:return]
+       I[:decimate, return_size] + I[:popstack] + I[:return]
     end
 
   end
@@ -530,9 +533,14 @@ module CMachineGrammar
   class FunctionCall < Struct.new(:name, :arguments)
 
     def compile(compile_data)
-      require 'pry'; binding.pry
-      I[:pushstack] + arguments.flat_map {|arg| arg.compile(compile_data)} +
+      # Evaluate the arguments and then transport them to the new stack
+      arguments.flat_map {|arg| arg.compile(compile_data)} +
+       I[:pushstack, function_arguments_size(compile_data)] +
        I[:call, name.value]
+    end
+
+    def function_arguments_size(compile_data)
+      compile_data.function_arguments_size(name.value)
     end
 
   end
