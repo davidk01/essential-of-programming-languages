@@ -475,8 +475,7 @@ module CMachineGrammar
 
   ##
   # Generate a label that marks the beginning of the function so that function calls can
-  # jump to the code. TODO: Write a blog post explaining how this all works because I'm still
-  # not sure how it is supposed to work.
+  # jump to the code.
 
   # Notes: The arguments are already meant to be on the stack set up by whoever has called us
   # this means I need to augment the context and treat each argument as a variable declaration.
@@ -485,7 +484,9 @@ module CMachineGrammar
 
     def compile(compile_data)
       # TODO: These two lines do not commute but it doesn't feel right that they don't commute
-      # Think of a better way.
+      # The reason they don't commute is because saving the function also sets the size of the
+      # return type in the current context which the return instruction is going to use to figure
+      # out how many values to move from the current activation frame back to the old one.
       function_context = compile_data.increment
       function_context.save_function_definition(self)
       arguments.each {|arg_def| arg_def.compile(function_context)}
@@ -507,6 +508,7 @@ module CMachineGrammar
     
     def compile(compile_data)
       VariableDeclaration.new(type, name, nil).compile(compile_data)
+      []
     end
 
   end
@@ -520,7 +522,7 @@ module CMachineGrammar
     def compile(compile_data)
       return_expression.compile(compile_data) +
        I[:storea, 0, (return_size = compile_data.return_size(compile_data))] +
-       I[:decimate, return_size] + I[:popstack] + I[:return]
+       I[:return, return_size]
     end
 
   end

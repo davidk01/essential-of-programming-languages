@@ -44,7 +44,7 @@ class CMachine
   ##
   # Readers for most of the internal state. Will help with debugging.
 
-  attr_reader :code, :stack, :pc, :ir
+  attr_reader :code, :stack, :pc, :ir, :return
 
   ##
   # Set up the initial stack and registers.
@@ -67,10 +67,10 @@ class CMachine
   
   def execute
     # Debugging output.
-    puts "Counter: #@pc."
     puts "Return: #{@return.map(&:to_s).join(', ')}."
-    puts "Instruction: #@ir."
+    puts "Instruction: #@pc, #@ir."
     puts "Stack: #{@stack.to_s}."
+    puts "-----------------"
     #########
     case (sym = (@ir || Instruction.new(:noop, [])).instruction)
     when :label
