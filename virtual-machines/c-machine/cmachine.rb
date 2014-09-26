@@ -15,9 +15,6 @@ class CMachine
   # :pop (decrement the stack pointer)
   # :pushstack k (add another stack on top of the current one for a function call and move k values
   #               from the current stack to the new one)
-  # :popstack (remove the context that was used for a function call and save anything that is left
-  #            on the previous stack)
-  # :decimate k (destroy everything on the stack except the first k values)
   # :call label (call a function by jumping to the given label/address after saving @pc)
   # :return (jump back to a saved @pc)
   # :loadc c (push a constant on top of the stack)
@@ -84,13 +81,10 @@ class CMachine
       new_stack = @stack.increment
       new_stack.push(*accumulator.reverse)
       @stack = new_stack
-    when :decimate
-      (@stack.store.length - @ir.arguments[0]).times { @stack.pop }
-    when :popstack
-      parent = @stack.parent
-      parent.push(*@stack.store)
-      @stack = parent
     when :return
+      parent = @stack.parent
+      @ir.arguments[0].times { parent.push(@stack.store.shift) }
+      @stack = parent
       @pc = @return.pop
     when :call
       label = @ir.arguments[0]
