@@ -14,7 +14,10 @@ class CMachine
   # :label l (symbolic labels for jump instructions)
   # :pop (decrement the stack pointer)
   # :pushstack (add another stack on top of the current one for a function call)
-  # :popstack (remove the context that was used for a function call)
+  # :popstack (remove the context that was used for a function call and save anything that is left
+  #            on the previous stack)
+  # :decimate k (destroy everything on the stack except the first k values)
+  # :call label (call a function by jumping to the given label/address)
   # :loadc c (push a constant on top of the stack)
   # :load c (take the top of the stack as a starting address and load c values from it)
   # :store c (take the top of the stack as a starting address and store c values to it)

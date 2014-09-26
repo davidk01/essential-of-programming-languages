@@ -13,13 +13,25 @@ module CMachineGrammar
 
     ##
     # We need to stash away function definitions so that we know what to do
-    # for allocation and deallocation when we reach a function call.
+    # for allocation and deallocation when we reach a function call. We also
+    # need to save the return type in the current context because when we are
+    # compiling the body of the function we need the struct size associated with
+    # the return type.
 
     def save_function_definition(function_definition)
+      @return_type = function_definition.return_type
       if @outer_context
         return @outer_context.save_function_definition(function_definition)
       end
       @functions[function_definition.name.value] = function_definition
+    end
+
+    ##
+    # You might wonder why we don't calculate the size when we save the function. I don't
+    # have a good reason for not calculating the size during saving. TODO: Fix this.
+
+    def return_size(compile_data)
+      @return_type.size(compile_data)
     end
 
     ##

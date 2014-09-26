@@ -484,8 +484,10 @@ module CMachineGrammar
   class FunctionDefinition < Struct.new(:return_type, :name, :arguments, :body)
 
     def compile(compile_data)
-      compile_data.save_function_definition(self)
+      # TODO: These two lines do not commute but it doesn't feel right that they don't commute
+      # Think of a better way.
       function_context = compile_data.increment
+      function_context.save_function_definition(self)
       arguments.each {|arg_def| arg_def.compile(function_context)}
       I[:label, name.value] + body.compile(function_context)
     end
@@ -509,15 +511,30 @@ module CMachineGrammar
   # Notes: No idea how this is supposed to work either. Trying to avoid frame pointers seems
   # like a lot of hassle.
 
-  class ReturnStatement < Struct.new(:return)
+  class ReturnStatement < Struct.new(:return_expression)
   
     def compile(compile_data)
-      
+      return_expression.compile(compile_data) +
+       I[:storea, 0, (return_size = compile_data.return_size(compile_data))] +
+       I[:decimate, return_size] +
+       I[:return]
     end
 
   end
 
+  ##
+  # This is obviously incorrect with the way I'm thinking about pushstack. That instruction
+  # allocates a new stack and so loading variables is going to break because those addresses
+  # are for the old stack.
+
   class FunctionCall < Struct.new(:name, :arguments)
+
+    def compile(compile_data)
+      require 'pry'; binding.pry
+      I[:pushstack] + arguments.flat_map {|arg| arg.compile(compile_data)} +
+       I[:call, name.value]
+    end
+
   end
 
 end
