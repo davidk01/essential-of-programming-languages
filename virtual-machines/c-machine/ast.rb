@@ -528,9 +528,21 @@ module CMachineGrammar
   end
 
   ##
-  # This is obviously incorrect with the way I'm thinking about pushstack. That instruction
-  # allocates a new stack and so loading variables is going to break because those addresses
-  # are for the old stack.
+  # Instead of worrying about frame pointers and relative addressing I have made
+  # function calls a little expensive and kept the load and store instructions simple.
+  # A function call is a matter of evaluating the function arguments, pushing them on
+  # the stack and then shifting a set amount of arguments to the new stack that was
+  # just allocated for this function call. For example, if we have a function call
+  # f(1, 2) then here are what the stack operation look like starting with an initial
+  # stack S: S -> S 1 2 -> S | S'(1 2). The divider is put there by :pushstack operation
+  # and it just shifts k values from the initial stack to the new one so that the function
+  # can have access to the arguments in the context that it is operating. This creates
+  # problem though because in C-like languages we can declare pointers and we can take
+  # the address of a value on the stack. This is a problem because that address is going
+  # to be incorrect in the context on the new stack. I can just add a restriction of only
+  # allowing pointers to heap allocated objects and force all arguments to a function to
+  # be a heap pointer or I can allow pointers to stack objects outside of the current
+  # context by complicating the load and store instructions a little bit. TODO: Figure this out.
 
   class FunctionCall < Struct.new(:name, :arguments)
 

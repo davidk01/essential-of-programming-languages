@@ -1,4 +1,4 @@
-require File.expand_path(File.dirname(__FILE__) + '/cmachinestack')
+require_relative './cmachinestack'
 
 ##
 # The actual virtual machine class.
@@ -52,6 +52,28 @@ class CMachine
   def initialize(c)
     @code, @stack, @pc, @ir, @return = c + Instruction[:call, 'main'],
      Stack.new, c.length - 1, nil, []
+    resolve_references
+  end
+
+  ##
+  # Resolve all jump and call instructions to actual addresses instead of labels.
+
+  def resolve_references
+    label_addresses = @code.each_with_index.reduce({}) do |label_map, (bytecode, index)|
+      if :label === bytecode.instruction
+        label_map[bytecode.arguments[0]] = index
+      end
+      label_map
+    end
+    @code.map! do |bytecode|
+      case bytecode.instruction
+      when :call, :jump, :jumpi, :jumpz, :jumpnz
+        bytecode.arguments = [label_addresses[bytecode.arguments[0]]]
+        bytecode
+      else
+        bytecode
+      end
+    end
   end
 
   ##
@@ -87,14 +109,8 @@ class CMachine
       @stack = parent
       @pc = @return.pop
     when :call
-      label = @ir.arguments[0]
       @return.push(@pc)
-      @code.each_with_index do |instr, index|
-        if :label == instr.instruction && label == instr.arguments[0]
-          return @pc = index
-        end
-      end
-      raise StandardError, "Unknown label: #{label}."
+      @pc = @ir.arguments[0]
     when :initvar
       len = @ir.arguments[0]
       @stack.push(*[0] * len)
