@@ -1,0 +1,31 @@
+func_cases() : int {
+  switch (10) {
+    case 2: {
+      return 1;
+    }
+    case 20: {
+      return 2;
+    }
+    case 1: {
+      return 3;
+    }
+    case 10: {
+      return 4;
+    }
+    case 200: {
+      return 5;
+    }
+    case 190: {
+      return 6;
+    }
+    case 100: {
+      return 7;
+    }
+    case 90: {
+      return 8;
+    }
+    default: {
+      return 0;
+    }
+  }
+}

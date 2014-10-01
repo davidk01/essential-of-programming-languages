@@ -8,4 +8,5 @@ ast = CMachineGrammar.parse(source)
 context = CMachineGrammar::CompileData.new
 code = ast.compile(context)
 machine = CMachine.new(code)
+open('code', 'w') {|f| f.puts code}
 require 'pry'; binding.pry

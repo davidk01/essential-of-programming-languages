@@ -109,7 +109,7 @@ module CMachineGrammar
     switch_statement = (m('switch') > cut! > ws > one_of('(') > ws > r(:expression)[:test] > ws >
      one_of(')') > ws > one_of('{') > cut! > (ws > case_fragment).many[:cases] > ws >
      m('default:') > cut! > ws > statement_block[:default]) >> ->(s) {
-      Switch.new(s[:test], s[:cases], s[:default])
+      Switch.new(s[:test], s[:cases].flatten, s[:default])
     }
 
     # ;
