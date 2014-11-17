@@ -1,9 +1,7 @@
-func_a(input : int, phantom : int) : int {
-  local : int = input;
-  return +(local, phantom);
-}
+(def func-a (input :int phantom :int) (do
+  ((declare local :int input)
+   (return (+ local phantom)))))
 
-main() : int {
-  local : int = 5;
-  return func_a(local, local);
-}
+(def main () :int (do
+  ((declare local :int 5)
+   (return (func-a local local)))))

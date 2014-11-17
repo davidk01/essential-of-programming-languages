@@ -1,8 +1,12 @@
-main() -> int {
-  x : int = 0;
-  y : int = 0;
-  z : int;
-  x = +(y, 1, 2, 3, -(1, 2, y));
-  y = *(1, 2, 3, /(1, 2, 3), -(1, 2, 3));
-  return x;
-}
+;; (def 'function name' 'argument list' 'return type' 'function body')
+;; 'function name' is a symbol
+;; 'argument list' is a list of pairs of symbols (argument name, type)
+;; 'return type' is a type
+;; 'function body' is a sequence of statements or expressions encoded as a list 
+(def main () :int (do
+  ((declare x :int 0)
+   (declare y :int 0)
+   (declare z :int)
+   (set x (+ 1 2 3 (- 1 2 y)))
+   (set y (* 1 2 3 (/ 1 2 3) (- 1 2 3)))
+   (return x))))

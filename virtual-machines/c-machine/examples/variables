@@ -1,25 +1,13 @@
-struct BasicStruct {
-  a : int;
-  b : int;
-  c : ptr(int);
-}
+(struct basic-struct a :int b :int c (ptr :int))
 
-struct AnotherBasicStruct {
-  a : int;
-  b : int;
-  c : ptr(Test);
-}
+(struct another-basic-struct a :int b :int c (ptr :int))
 
-struct NonBasicStruct {
-  a : int;
-  b : array(int, 10);
-  c : BasicStruct;
-}
+(struct non-basic-struct a :int b (array :int 10) c :basic-struct)
 
-a : int = 1;
-b : int = 2;
-c : BasicStruct;
-d : AnotherBasicStruct;
-e : NonBasicStruct;
-
-a; b; c; d; e;
+(def main () :int (do
+  ((declare a :int 1)
+   (declare b :int 2)
+   (declare c :basic-struct)
+   (declare d :another-basic-struct)
+   (declare e :non-basic-struct)
+   a b c d e)))

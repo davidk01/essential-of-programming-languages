@@ -1,17 +1,5 @@
-struct BasicStruct {
-  a : int;
-  b : int;
-  c : ptr(int);
-}
+(struct basic-struct a :int b :int c (ptr :int))
 
-struct AnotherBasicStruct {
-  a : int;
-  b : int;
-  c : ptr(Test);
-}
+(struct another-basic-struct a :int b :int c (ptr :basic-struct))
 
-struct NonBasicStruct {
-  a : int;
-  b : array(int, 10);
-  c : BasicStruct;
-}
+(struct non-basic-struct a :int b (array :int 10) c :basic-struct)
