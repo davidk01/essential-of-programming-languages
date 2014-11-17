@@ -336,7 +336,9 @@ module CMachineGrammar
 
   end
 
-  # Base types.
+  # Type related nodes.
+  ##
+
   class BaseType
     def self.size(_); 1; end
   end
@@ -435,7 +437,6 @@ module CMachineGrammar
   end
 
   ##
-  # TODO: I need to explain this better as well because there might be a bug or two lurking in there.
 
   class VariableDeclaration < Struct.new(:type, :variable, :value)
 

@@ -1,4 +1,4 @@
-(def main () :int (do
-  ((declare y :bool #t)
-   (if y (declare x :int 2) (declare z :int 3))
-   (return x))))
+(def main () int (do
+  (declare y bool #t)
+  (if y (declare x int 2) (declare z int 3))
+  (return x)))
