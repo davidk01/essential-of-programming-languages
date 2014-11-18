@@ -113,7 +113,7 @@ module CMachineGrammar
   end
 
   @operator_map = {
-   :'=' => EqExp, :< => LessExp
+   :'=' => EqExp, :< => LessExp, :+ => AddExp
   }
 
   ##
@@ -135,7 +135,7 @@ module CMachineGrammar
 
     # If we got to this point then we must be dealing with an array
 
-    case (h = s_expr.first)
+    case (h = s_expr.first.symbol!)
     when :struct # struct definition
       struct_name = s_expr[1].symbol!
       struct_members = s_expr[2..-1].each_slice(2).map do |member_name, member_type|
@@ -167,16 +167,29 @@ module CMachineGrammar
       false_branch = (false_code = s_expr[3]).nil? ? Statements.new([]) : to_ast(false_code)
       If.new(test, true_branch, false_branch)
     when :while # while loop
+      test_expression = to_ast(s_expr[1])
+      loop_body = to_ast(s_expr[2])
+      While.new(test_expression, loop_body)
     when :for # for loop
+      init = to_ast(s_expr[1])
+      test = to_ast(s_expr[2])
+      update = to_ast(s_expr[3])
+      body = to_ast(s_expr[4])
+      For.new(init, test, update, body)
     when :case # case statement
     when :return # return statement
       return_expression = to_ast(s_expr[1])
       ReturnStatement.new(return_expression)
+    when :+, :-, :*, :/, :>>, :<<, :^
+      elements = s_expr[1..-1].map {|e| to_ast(e)}
+      @operator_map[h].new(elements)
     when :'=', :<, :>, :<=, :>= # tests
       comparison_elements = s_expr[1..-1].map {|e| to_ast(e)}
       @operator_map[h].new(comparison_elements)
     else
-      raise StandardError, "Unknown node type: #{s_expr}."
+      # If none of the above is true then it must be a function call
+      function_arguments = s_expr[1..-1].map {|e| to_ast(e)}
+      FunctionCall.new(h, function_arguments)
     end
   end
 
