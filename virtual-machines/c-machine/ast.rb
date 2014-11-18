@@ -47,6 +47,15 @@ module CMachineGrammar
 
   end
 
+  class StringConst < Struct.new(:value)
+
+    ##
+    # Same as below.
+
+    def compile(_); I[:loadc, value]; end
+
+  end
+
   class ConstExp < Struct.new(:value)
 
     ##
@@ -55,15 +64,6 @@ module CMachineGrammar
 
     def compile(_); I[:loadc, value]; end
 
-  end
-
-  ##
-  # Holds numeric values. Compiling just means loading the constant.
-
-  class Number < Struct.new(:value)
-    def compile(_)
-      I[:loadc, value]
-    end
   end
 
   class DiffExp < OpReducers
@@ -328,7 +328,8 @@ module CMachineGrammar
     ##
     # Pretty simple. Compile the expression and then pop.
     # I'm not sure if a single pop is enough. What happens when we load
-    # a compound variable on top of the stack? (TODO: Figure this out.)
+    # a compound variable on top of the stack? (TODO: Currently the stack invariant
+    # is not maintained so need to figure out the correct number of elements to pop)
 
     def compile(compile_data)
       expression.compile(compile_data) + I[:pop, 1]
@@ -457,6 +458,9 @@ module CMachineGrammar
 
     end
 
+    ##
+    # TODO: Fix the storing and popping because not all variables are of the same size.
+
     def compile(compile_data)
       latest_declaration = compile_data.latest_declaration
       if latest_declaration.nil?
@@ -468,7 +472,9 @@ module CMachineGrammar
       compile_data.add_variable(variable_data)
       variable_initialization = I[:initvar, type.size(compile_data).to_i]
       variable_assignment = value ?
-       value.compile(compile_data) + I[:storea, variable_data.offset, 1] + I[:pop, 1] : []
+       value.compile(compile_data) +
+       I[:storea, variable_data.offset, (s = value.size(compile_data))] +
+       I[:pop, s] : []
       variable_initialization + variable_assignment
     end
 

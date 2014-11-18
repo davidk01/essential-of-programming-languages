@@ -5,9 +5,9 @@
 (struct non-basic-struct a int b (array int 10) c basic-struct)
 
 (def main () int (do
-  ((declare a int 1)
-   (declare b int 2)
-   (declare c basic-struct)
-   (declare d another-basic-struct)
-   (declare e non-basic-struct)
-   a b c d e)))
+  (declare a int 1)
+  (declare b int 2)
+  (declare c basic-struct)
+  (declare d another-basic-struct)
+  (declare e non-basic-struct)
+  (return e)))

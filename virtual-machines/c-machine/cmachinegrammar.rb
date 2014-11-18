@@ -20,25 +20,25 @@ module CMachineGrammar
     }
 
     double_quote_string = (one_of('"') > one_of(/[^"]/).many[:chars] > one_of('"')) >> ->(s) {
-      s[:chars].map(&:text).join
+      StringConst.new(s[:chars].map(&:text).join)
     }
 
     single_quote_string = (one_of("'") > one_of(/[^']/).many[:chars] > one_of("'")) >> ->(s) {
-      s[:chars].map(&:text).join
+      StringConst.new(s[:chars].map(&:text).join)
     }
 
     string = double_quote_string | single_quote_string
 
     integer = one_of(/\d/).many[:digits] >> ->(s) {
-      s[:digits].map(&:text).join.to_i
+      ConstExp.new(s[:digits].map(&:text).join.to_i)
     }
 
     boolean = (m('#t')[:true] | m('#f')[:false]) >> ->(s) {
-      s[:true] ? true : false
+      ConstExp.new(s[:true] ? true : false)
     }
 
     float = (one_of(/\d/).many[:integral] > one_of('.') > one_of(/\d/).many[:fractional]) >> ->(s) {
-      [s[:integral].map(&:text), '.', s[:fractional].map(&:text)].flatten.join.to_f
+      ConstExp.new([s[:integral].map(&:text), '.', s[:fractional].map(&:text)].flatten.join.to_f)
     }
 
     atomic = float | integer | boolean | string | symbol
@@ -55,6 +55,10 @@ module CMachineGrammar
 
     rule :start, program[:p] >> ->(s) { s[:p].reject(&:empty?).map(&:first) }
   end
+
+  ##
+  # We need to recursively figure out what the type of the variable is because compound type
+  # constructors like ptr and array can be nested arbitrarily.
 
   def self.type_resolution(type_specification)
     case type_specification
@@ -81,6 +85,21 @@ module CMachineGrammar
     end
   end
 
+  ##
+  # When we declare a variable we can supply a default value and the default value can be
+  # an arbitrary expression which means we can't just plop down the node into the variable
+  # value field and need to do some extra traversals over the s-expression to get it in the
+  # form we want.
+
+  def self.value_resolution(variable_value)
+    case variable_value
+    when Array
+      to_ast(variable_value)
+    else
+      variable_value
+    end
+  end
+
   def self.to_ast(list)
     case list.first
     when :struct # struct definition
@@ -90,15 +109,27 @@ module CMachineGrammar
       end
       StructDeclaration.new(struct_name, struct_members)
     when :def # function definition
+      function_name = list[1]
+      function_arguments = list[2].each_slice(2).map do |argument_name, argument_type|
+        ArgumentDefinition.new(type_resolution(argument_type), argument_name)
+      end
+      return_type = list[3]
+      function_body = list[4]
+      FunctionDefinition.new(type_resolution(return_type), function_name,
+       function_arguments, to_ast(function_body))
     when :do # sequence of statements
+      Statements.new(list[1..-1].map {|e| to_ast(e)})
     when :declare # variable declaration
-      # TODO: continue here
-      require 'pry'; binding.pry
+      variable_name = list[1]
+      variable_type = type_resolution(list[2])
+      variable_value = value_resolution(list[3])
+      VariableDeclaration.new(variable_type, variable_name, variable_value)
     when :set # variable mutation
     when :if # if expression
     when :while # while loop
     when :for # for loop
     when :case # case statement
+    when :return # return statement
     else
       raise StandardError, "Unknown node type."
     end
