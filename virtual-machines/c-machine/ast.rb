@@ -490,10 +490,9 @@ module CMachineGrammar
   class FunctionDefinition < Struct.new(:return_type, :name, :arguments, :body)
 
     def compile(compile_data)
-      # TODO: These two lines do not commute but it doesn't feel right that they don't commute
-      # The reason they don't commute is because saving the function also sets the size of the
-      # return type in the current context which the return instruction is going to use to figure
-      # out how many values to move from the current activation frame back to the old one.
+      # Note that the function definition must be saved in the new context because the return
+      # type must be visible in that context so that we know what to do with return statements, i.e.
+      # how many values we need to pop and return to the previous stack.
       function_context = compile_data.increment
       function_context.save_function_definition(self)
       arguments.each {|arg_def| arg_def.compile(function_context)}
