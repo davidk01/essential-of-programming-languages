@@ -3,3 +3,5 @@
 (struct another-basic-struct a int b int c (ptr basic-struct))
 
 (struct non-basic-struct a int b (array int 10) c basic-struct)
+
+(struct list next (ptr list) data int)

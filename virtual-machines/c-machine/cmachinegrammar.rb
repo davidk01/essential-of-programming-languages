@@ -139,7 +139,7 @@ module CMachineGrammar
     when :struct # struct definition
       struct_name = s_expr[1].symbol!
       struct_members = s_expr[2..-1].each_slice(2).map do |member_name, member_type|
-        StructMember.new(type_resolution(member_type.symbol!), member_name.symbol!)
+        StructMember.new(type_resolution(member_type), member_name.symbol!)
       end
       StructDeclaration.new(struct_name, struct_members)
     when :def # function definition
@@ -177,13 +177,27 @@ module CMachineGrammar
       body = to_ast(s_expr[4])
       For.new(init, test, update, body)
     when :case # case statement
+      unless (cases = s_expr[2..-2]).length % 2 == 0
+        raise StandardError, "Case statement must have a default case."
+      end
+      case_element = to_ast(s_expr[1])
+      default = to_ast(s_expr[-1])
+      case_pairs = cases.each_slice(2).map do |element, expression|
+        case element
+        when ConstExp, StringConst
+        else
+          raise StandardError, "Case fragment must be constant: #{element}."
+        end
+        CaseFragment.new(element, to_ast(expression))
+      end
+      Switch.new(case_element, case_pairs, default)
     when :return # return statement
       return_expression = to_ast(s_expr[1])
       ReturnStatement.new(return_expression)
-    when :+, :-, :*, :/, :>>, :<<, :^
+    when :+, :-, :*, :/, :>>, :<<, :^, :%, :&, :| # arithmetic and bitwise operators
       elements = s_expr[1..-1].map {|e| to_ast(e)}
       @operator_map[h].new(elements)
-    when :'=', :<, :>, :<=, :>= # tests
+    when :'=', :!=, :<, :>, :<=, :>=, :'&&', :'||' # tests and boolean operators
       comparison_elements = s_expr[1..-1].map {|e| to_ast(e)}
       @operator_map[h].new(comparison_elements)
     else
