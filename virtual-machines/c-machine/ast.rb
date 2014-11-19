@@ -204,7 +204,16 @@ module CMachineGrammar
 
   end
 
+  class SizeOf < Struct.new(:type)
+    def compile(compile_data)
+      raise StandardError, "Not implemented."
+    end
+  end
+
   class Assignment < Struct.new(:left, :right)
+    def compile(compile_data)
+      raise StandardError, "Not implemented."
+    end
   end
 
   class If < Struct.new(:test, :true_branch, :false_branch)

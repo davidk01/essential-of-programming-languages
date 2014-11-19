@@ -191,6 +191,9 @@ module CMachineGrammar
         CaseFragment.new(element, to_ast(expression))
       end
       Switch.new(case_element, case_pairs, default)
+    when :sizeof
+      type = type_resolution(s_expr[1])
+      SizeOf.new(type)
     when :return # return statement
       return_expression = to_ast(s_expr[1])
       ReturnStatement.new(return_expression)
