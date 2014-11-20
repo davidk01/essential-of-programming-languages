@@ -99,7 +99,7 @@ module CMachineGrammar
   end
 
   @operator_map = {
-   :'=' => EqExp, :< => LessExp, :+ => AddExp, :* => MultExp, :- => DiffExp
+   :'=' => EqExp, :< => LessExp, :+ => AddExp, :* => MultExp, :- => DiffExp, :/ => DivExp
   }
 
   ##
@@ -145,7 +145,7 @@ module CMachineGrammar
     when :declare # variable declaration
       variable_name = s_expr[1].symbol!
       variable_type = type_resolution(s_expr[2])
-      variable_value = to_ast(s_expr[3])
+      variable_value = (value = s_expr[3]).nil? ? nil : to_ast(value)
       VariableDeclaration.new(variable_type, variable_name, variable_value)
     when :set # variable mutation
       variable_name = s_expr[1].symbol!

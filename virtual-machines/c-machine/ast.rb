@@ -100,6 +100,17 @@ module CMachineGrammar
   class DiffExp < OpReducers
 
     ##
+    # Same as for +AddExp+
+
+    def infer_type(typing_context)
+      expression_types = expressions.map {|e| e.infer_type(typing_context)}
+      if !expression_types.all? {|t| t == IntType || t == FloatType}
+        raise StandardError, "Mis-typed subtraction expression."
+      end
+      expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+    end
+
+    ##
     # For each expression in the list of expressions we compile it and then we append n - 1 :- operations,
     # where n is the length of the expressions. e1 e2 e3 ... en :- :- ... :-.
 
@@ -178,6 +189,18 @@ module CMachineGrammar
 
   class DivExp < OpReducers
 
+    ##
+    # Same as for +AddExp+.
+
+    def infer_type(typing_context)
+      expression_types = expressions.map {|e| e.infer_type(typing_context)}
+      if !expression_types.all? {|t| t == IntType || t == FloatType}
+        raise StandardError, "Mis-typed division expression."
+      end
+      expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+    end
+
+    ##
     # Same as above.
 
     def compile(compile_data); reduce_with_operation(compile_data, :/); end
@@ -292,6 +315,17 @@ module CMachineGrammar
   end
 
   class Assignment < Struct.new(:left, :right)
+
+    ##
+    # The type of the left expression and the type of the right expression have to be
+    # conformant. I'm not sure what this means though because there is an lvalue and rvalue
+    # distinction that is still unclear to me.
+
+    def type_check(typing_context)
+      if left.infer_type(typing_context) != right.infer_type(typing_context)
+        raise StandardError, "Non-conformant assignment."
+      end
+    end
 
     ##
     # The types of left and right need to match and the left side needs to be an lvalue.
