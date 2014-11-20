@@ -1,7 +1,7 @@
-(def func-a (input int phantom int) (do
+(def func-a (input int phantom int) int
   (declare local int input)
-  (return (+ local phantom))))
+  (return (+ local phantom)))
 
-(def main () int (do
+(def main () int
   (declare local int 5)
-  (return (func-a local local))))
+  (return (func-a local local)))

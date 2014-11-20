@@ -1,5 +1,6 @@
 require 'pegrb'
 require_relative './ast'
+require_relative './typingcontext'
 
 # The grammar that describes the subset of C we are going to work with.
 # I have taken some liberties with how arithmetic operations are defined
@@ -98,7 +99,7 @@ module CMachineGrammar
   end
 
   @operator_map = {
-   :'=' => EqExp, :< => LessExp, :+ => AddExp, :* => MultExp
+   :'=' => EqExp, :< => LessExp, :+ => AddExp, :* => MultExp, :- => DiffExp
   }
 
   ##
@@ -133,7 +134,11 @@ module CMachineGrammar
         ArgumentDefinition.new(type_resolution(argument_type), argument_name.symbol!)
       end
       return_type = type_resolution(s_expr[3])
-      function_body = to_ast(s_expr[4])
+      function_body = Statements.new(s_expr[4..-1].map {|e| to_ast(e)})
+      # make sure the argument names are unique
+      if function_arguments.length != function_arguments.map(&:name).uniq.length
+        raise StandardError, "Argument names must be unique: function = #{function_name}."
+      end
       FunctionDefinition.new(return_type, function_name, function_arguments, function_body)
     when :do # sequence of statements
       Statements.new(s_expr[1..-1].map {|e| to_ast(e)})
@@ -198,9 +203,18 @@ module CMachineGrammar
     end
   end
 
+  ##
+  # Go through the AST and make sure everything type checks.
+
+  def self.annotate_types(ast)
+    typing_context = TypingContext.new
+    ast.each {|node| node.type_check(typing_context)}
+  end
+
   def self.parse(iterable)
     s_expressions = @grammar.parse(iterable)
-    s_expressions.map {|l| to_ast(l)}
+    ast = s_expressions.map {|l| to_ast(l)}
+    annotate_types(ast)
   end
 
 end

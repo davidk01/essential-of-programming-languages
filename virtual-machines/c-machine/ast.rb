@@ -6,6 +6,21 @@ I = CMachine::Instruction
 module CMachineGrammar
 
   ##
+  # We use symbols for variables so instead of special casing symbols I'm just going to open
+  # up the class and make sure symbols play nice with type checking and type inference.
+
+  class ::Symbol
+
+    ##
+    # Not much to do here other than look up the type of the variable in the typing context.
+
+    def infer_type(typing_context)
+      typing_context[self].type
+    end
+
+  end
+
+  ##
   # Arithmetic and order operations have a common structure when it comes to compiling them
   # to stack operations. +OpReducers+ encapsulates that commonality.
 
@@ -59,6 +74,22 @@ module CMachineGrammar
   class ConstExp < Struct.new(:value)
 
     ##
+    # We just need to compare the constant to our basic constants and return the proper type.
+
+    def infer_type(typing_context)
+      case value
+      when Float
+        FloatType
+      when Integer
+        IntType
+      when true, false
+        BoolType
+      else
+        raise StandardError, "Unknown type for constant: #{value}."
+      end
+    end
+
+    ##
     # Just load the constant.
     # :loadc self.value
 
@@ -77,6 +108,19 @@ module CMachineGrammar
   end
 
   class AddExp < OpReducers
+
+    ##
+    # To infer the type of an addition expression we infer the types of each addend and make sure
+    # that each addend has an integer or float type. If there is a float type in the mix then
+    # the type of the entire expression is float.
+
+    def infer_type(typing_context)
+      expression_types = expressions.map {|e| e.infer_type(typing_context)}
+      if !expression_types.all? {|t| t == IntType || t == FloatType}
+        raise StandardError, "Mis-typed add expression."
+      end
+      expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+    end
 
     ##
     # Same reasoning as for +DiffExp+ except we use :+.
@@ -113,6 +157,17 @@ module CMachineGrammar
   end
 
   class MultExp < OpReducers
+
+    ##
+    # Same as for +AddExp+.
+
+    def infer_type(typing_context)
+      expression_types = expressions.map {|e| e.infer_type(typing_context)}
+      if !expression_types.all? {|t| t == IntType || t == FloatType}
+        raise StandardError, "Mis-typed multiplication expression."
+      end
+      expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+    end
 
     ##
     # Same as above.
@@ -205,21 +260,46 @@ module CMachineGrammar
   end
 
   class SizeOf < Struct.new(:type)
+
+    ##
+    # The expression is already a type expression so we just need to look it up in the
+    # context and replace it with the size.
+
     def compile(compile_data)
       raise StandardError, "Not implemented."
     end
+
   end
 
   class Malloc < Struct.new(:size)
+
+    ##
+    # Malloc is special when it comes to types. It is a wildcard pointer and so can be assigned
+    # to any pointer type variable.
+
+    def infer_type(_)
+      WildcardPointer
+    end
+
+    ##
+    # Allocate the requested amount of space and return a pointer to the start of the allocated
+    # memory block.
+
     def compile(compile_data)
       raise StandardError, "Not implemented."
     end
+
   end
 
   class Assignment < Struct.new(:left, :right)
+
+    ##
+    # The types of left and right need to match and the left side needs to be an lvalue.
+
     def compile(compile_data)
       raise StandardError, "Not implemented."
     end
+
   end
 
   class If < Struct.new(:test, :true_branch, :false_branch)
@@ -330,6 +410,15 @@ module CMachineGrammar
   class Statements < Struct.new(:statements)
 
     ##
+    # +Statements+ instances result from a block so we need to introduce a new context
+    # that corresponds to the new block.
+
+    def type_check(typing_context)
+      statements_context = typing_context.increment
+      statements.each {|s| s.type_check(statements_context)}
+    end
+
+    ##
     # s1 pop s2 pop s3 pop ... sn pop
 
     def compile(compile_data)
@@ -367,6 +456,17 @@ module CMachineGrammar
 
   class VoidType < BaseType
     def self.size(_); 0; end
+  end
+
+  ##
+  # This is the type that malloc returns and it conforms to any kind of pointer type.
+
+  class WildcardPointer
+  
+    def self.==(other_type)
+      PtrType === other_type
+    end
+
   end
 
   # Semi-base types.
@@ -411,6 +511,14 @@ module CMachineGrammar
   end
 
   class StructDeclaration < Struct.new(:name, :members)
+
+    ##
+    # Type checking a struct declaration is pretty simple because we just add information
+    # to the typing context.
+
+    def type_check(typing_context)
+      typing_context[name] = self
+    end
 
     ##
     # The offset for the struct members is exactly what you'd expect. It is the sum of all
@@ -474,6 +582,24 @@ module CMachineGrammar
     end
 
     ##
+    # First we need to make sure a variable or function with the same name has not already
+    # been declared. Then if there is a value we need to make sure that the type of the initializer
+    # matches the type of the variable.
+
+    def type_check(typing_context)
+      if typing_context[variable]
+        raise StandardError, "Can not declare two variables with the same name: #{variable}."
+      end
+      typing_context[variable] = self
+      if value
+        if (value_type = value.infer_type(typing_context)) != type
+          require 'pry'; binding.pry
+          raise StandardError, "Type of variable does not match type of initializer: #{variable}."
+        end
+      end
+    end
+
+    ##
     # TODO: Fix the storing and popping because not all variables are of the same size.
 
     def compile(compile_data)
@@ -503,6 +629,18 @@ module CMachineGrammar
   # this means I need to augment the context and treat each argument as a variable declaration.
 
   class FunctionDefinition < Struct.new(:return_type, :name, :arguments, :body)
+
+    ##
+    # For the time being no forward references are allowed so within the function body only
+    # previously declared functions can be called. Unlike a struct declaration we need to do
+    # bit more than add the function to the context we also need to type check the body of
+    # the function.
+
+    def type_check(typing_context)
+      typing_context[name] = self
+      typing_context.current_function = self
+      body.type_check(typing_context)
+    end
 
     def compile(compile_data)
       # Note that the function definition must be saved in the new context because the return
@@ -540,6 +678,17 @@ module CMachineGrammar
 
   class ReturnStatement < Struct.new(:return_expression)
   
+    ##
+    # Verify that the return expression and the current function have the same type.
+
+    def type_check(typing_context)
+      current_function = typing_context.current_function
+      return_type = return_expression.infer_type(typing_context)
+      if return_type != current_function.return_type
+        raise StandardError, "Type of return expression does not match type of function: #{current_function}."
+      end
+    end
+
     def compile(compile_data)
       return_expression.compile(compile_data) +
        I[:storea, 0, (return_size = compile_data.return_size(compile_data))] +
