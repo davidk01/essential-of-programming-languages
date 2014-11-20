@@ -719,7 +719,7 @@ module CMachineGrammar
       current_function = typing_context.current_function
       return_type = return_expression.infer_type(typing_context)
       if return_type != current_function.return_type
-        raise StandardError, "Type of return expression does not match type of function: #{current_function}."
+        raise StandardError, "Type of return expression #{return_expression} does not match type of function: #{current_function.name}."
       end
     end
 
