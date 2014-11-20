@@ -97,23 +97,8 @@ module CMachineGrammar
     end
   end
 
-  ##
-  # When we declare a variable we can supply a default value and the default value can be
-  # an arbitrary expression which means we can't just plop down the node into the variable
-  # value field and need to do some extra traversals over the s-expression to get it in the
-  # form we want.
-
-  def self.value_resolution(variable_value)
-    case variable_value
-    when Array
-      to_ast(variable_value)
-    else
-      variable_value
-    end
-  end
-
   @operator_map = {
-   :'=' => EqExp, :< => LessExp, :+ => AddExp
+   :'=' => EqExp, :< => LessExp, :+ => AddExp, :* => MultExp
   }
 
   ##
@@ -155,11 +140,11 @@ module CMachineGrammar
     when :declare # variable declaration
       variable_name = s_expr[1].symbol!
       variable_type = type_resolution(s_expr[2])
-      variable_value = value_resolution(s_expr[3])
+      variable_value = to_ast(s_expr[3])
       VariableDeclaration.new(variable_type, variable_name, variable_value)
     when :set # variable mutation
       variable_name = s_expr[1].symbol!
-      variable_value = value_resolution(s_expr[2])
+      variable_value = to_ast(s_expr[2])
       Assignment.new(variable_name, variable_value)
     when :if # if expression. else branch is optional so we need to fill it in with empty statement
       test = to_ast(s_expr[1])
@@ -191,9 +176,12 @@ module CMachineGrammar
         CaseFragment.new(element, to_ast(expression))
       end
       Switch.new(case_element, case_pairs, default)
-    when :sizeof
+    when :sizeof # sizeof operator mostly useful for malloc
       type = type_resolution(s_expr[1])
       SizeOf.new(type)
+    when :malloc
+      size = to_ast(s_expr[1])
+      Malloc.new(size)
     when :return # return statement
       return_expression = to_ast(s_expr[1])
       ReturnStatement.new(return_expression)

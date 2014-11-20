@@ -210,6 +210,12 @@ module CMachineGrammar
     end
   end
 
+  class Malloc < Struct.new(:size)
+    def compile(compile_data)
+      raise StandardError, "Not implemented."
+    end
+  end
+
   class Assignment < Struct.new(:left, :right)
     def compile(compile_data)
       raise StandardError, "Not implemented."
