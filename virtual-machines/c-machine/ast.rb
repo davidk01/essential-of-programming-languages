@@ -15,7 +15,7 @@ module CMachineGrammar
     # Not much to do here other than look up the type of the variable in the typing context.
 
     def infer_type(typing_context)
-      typing_context[self].type
+      @type ||= typing_context[self].type
     end
 
   end
@@ -77,16 +77,16 @@ module CMachineGrammar
     # We just need to compare the constant to our basic constants and return the proper type.
 
     def infer_type(typing_context)
-      case value
-      when Float
-        FloatType
-      when Integer
-        IntType
-      when true, false
-        BoolType
-      else
-        raise StandardError, "Unknown type for constant: #{value}."
-      end
+      @type ||= case value
+        when Float
+          FloatType
+        when Integer
+          IntType
+        when true, false
+          BoolType
+        else
+          raise StandardError, "Unknown type for constant: #{value}."
+        end
     end
 
     ##
@@ -107,7 +107,7 @@ module CMachineGrammar
       if !expression_types.all? {|t| t == IntType || t == FloatType}
         raise StandardError, "Mis-typed subtraction expression."
       end
-      expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+      @type ||= expression_types.any? {|e| e == FloatType} ? FloatType : IntType
     end
 
     ##
@@ -130,7 +130,7 @@ module CMachineGrammar
       if !expression_types.all? {|t| t == IntType || t == FloatType}
         raise StandardError, "Mis-typed add expression."
       end
-      expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+      @type ||= expression_types.any? {|e| e == FloatType} ? FloatType : IntType
     end
 
     ##
@@ -177,7 +177,7 @@ module CMachineGrammar
       if !expression_types.all? {|t| t == IntType || t == FloatType}
         raise StandardError, "Mis-typed multiplication expression."
       end
-      expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+      @type ||= expression_types.any? {|e| e == FloatType} ? FloatType : IntType
     end
 
     ##
@@ -197,7 +197,7 @@ module CMachineGrammar
       if !expression_types.all? {|t| t == IntType || t == FloatType}
         raise StandardError, "Mis-typed division expression."
       end
-      expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+      @type ||= expression_types.any? {|e| e == FloatType} ? FloatType : IntType
     end
 
     ##
@@ -627,7 +627,6 @@ module CMachineGrammar
       typing_context[variable] = self
       if value
         if (value_type = value.infer_type(typing_context)) != type
-          require 'pry'; binding.pry
           raise StandardError, "Type of variable does not match type of initializer: #{variable}."
         end
       end
