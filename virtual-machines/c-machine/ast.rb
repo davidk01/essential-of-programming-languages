@@ -231,6 +231,12 @@ module CMachineGrammar
   class LessEqExp < OpReducers
 
     ##
+    # We can only compare numeric things. TODO: Pick up here.
+
+    def infer_type(typing_context)
+    end
+
+    ##
     # Same as above.
 
     def compile(compile_data); reduce_with_comparison(compile_data, :<=); end
@@ -337,6 +343,19 @@ module CMachineGrammar
   end
 
   class If < Struct.new(:test, :true_branch, :false_branch)
+
+    ##
+    # The test must be boolean and then each branch must be well-typed. I don't see any reason
+    # why both branches must be of the same type so I'm not going to force that condition. Will
+    # revisit later.
+
+    def type_check(typing_context)
+      if test.infer_type(typing_context) != BoolType
+        raise StandardError, "Test for if statement must be of boolean type."
+      end
+      true_branch.type_check(typing_context)
+      false_branch.type_check(typing_context)
+    end
 
     ##
     # test jumpz(:else) true_branch jump(:end) [:else] false_branch [:end]

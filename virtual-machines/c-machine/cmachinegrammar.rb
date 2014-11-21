@@ -99,7 +99,8 @@ module CMachineGrammar
   end
 
   @operator_map = {
-   :'=' => EqExp, :< => LessExp, :+ => AddExp, :* => MultExp, :- => DiffExp, :/ => DivExp
+   :'=' => EqExp, :< => LessExp, :+ => AddExp, :* => MultExp, :- => DiffExp, :/ => DivExp,
+   :<= => LessEqExp
   }
 
   ##
