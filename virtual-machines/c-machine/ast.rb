@@ -18,6 +18,14 @@ module CMachineGrammar
       typing_context[self].type
     end
 
+    ##
+    # Get the variable data and push the contents on the stack.
+
+    def compile(compile_data)
+      variable_data = compile_data.get_variable_data(self)
+      I[:loada, variable_data.offset, variable_data.declaration.type.size(compile_data)]
+    end
+
   end
 
   ##
@@ -72,6 +80,13 @@ module CMachineGrammar
   end
 
   class ConstExp < Struct.new(:value)
+
+    ##
+    # What does it mean to typecheck a constant?
+
+    def type_check(typing_context)
+      true
+    end
 
     ##
     # We just need to compare the constant to our basic constants and return the proper type.
@@ -168,6 +183,13 @@ module CMachineGrammar
   end
 
   class MultExp < OpReducers
+
+    def type_check(typing_context)
+      expression_types = expressions.map {|e| e.infer_type(typing_context)}
+      if !expression_types.all?(&:numeric?)
+        raise StandardError, "Can not multiply non-numeric arguments."
+      end
+    end
 
     ##
     # Same as for +AddExp+.
@@ -667,7 +689,7 @@ module CMachineGrammar
       end
 
       def name
-        declaration.variable.value
+        declaration.variable
       end
 
     end
@@ -738,7 +760,7 @@ module CMachineGrammar
       function_context = compile_data.increment
       function_context.save_function_definition(self)
       arguments.each {|arg_def| arg_def.compile(function_context)}
-      I[:label, name.value] + body.compile(function_context)
+      I[:label, name] + body.compile(function_context)
     end
 
     def arguments_size(compile_data)
@@ -768,20 +790,23 @@ module CMachineGrammar
   class ReturnStatement < Struct.new(:return_expression)
   
     ##
-    # Verify that the return expression and the current function have the same type.
+    # Verify that the return expression and the current function have the same type. Also, stash
+    # away the size of the return type because we are going to need it during compilation.
 
     def type_check(typing_context)
+      return_expression.type_check(typing_context)
       current_function = typing_context.current_function
       return_type = return_expression.infer_type(typing_context)
       if return_type != current_function.return_type
         raise StandardError, "Type of return expression #{return_expression} does not match type of function: #{current_function.name}."
       end
+      @return_size = current_function.return_type.size(typing_context)
     end
 
     def compile(compile_data)
       return_expression.compile(compile_data) +
-       I[:storea, 0, (return_size = compile_data.return_size(compile_data))] +
-       I[:return, return_size]
+       I[:storea, 0, @return_size] +
+       I[:return, @return_size]
     end
 
   end
@@ -790,6 +815,18 @@ module CMachineGrammar
   # TODO: Write explanation.
 
   class FunctionCall < Struct.new(:name, :arguments)
+
+    ##
+    # The arguments at the call site must match the signature of the function being called.
+
+    def type_check(typing_context)
+      function = typing_context[name]
+      function_argument_types = function.arguments.map(&:type)
+      call_argument_types = arguments.map {|arg| arg.infer_type(typing_context)}
+      if !function_argument_types.zip(call_argument_types).all? {|a, b| a == b}
+        raise StandardError, "Call site arguments do not match definition: #{name}."
+      end
+    end
 
     ##
     # Pretty obvious. When calling a function the type is whatever is returned from the function
@@ -804,11 +841,11 @@ module CMachineGrammar
       # Evaluate the arguments and then transport them to the new stack
       arguments.flat_map {|arg| arg.compile(compile_data)} +
        I[:pushstack, function_arguments_size(compile_data)] +
-       I[:call, name.value]
+       I[:call, name]
     end
 
     def function_arguments_size(compile_data)
-      compile_data.function_arguments_size(name.value)
+      compile_data.function_arguments_size(name)
     end
 
   end

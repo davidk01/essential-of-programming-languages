@@ -6,9 +6,9 @@ module CMachineGrammar
 
   class CompileData
 
-    def initialize(outer_context = nil)
+    def initialize(outer_context = nil, level = 0)
       @label_counter, @structs, @functions = -1, {}, {}
-      @outer_context, @variables = outer_context, []
+      @outer_context, @variables, @level = outer_context, [], level
     end
 
     ##
@@ -23,26 +23,7 @@ module CMachineGrammar
       if @outer_context
         return @outer_context.save_function_definition(function_definition)
       end
-      @functions[function_definition.name.value] = function_definition
-    end
-
-    ##
-    # TODO: This is turning into a real mess. The context is starting to handle
-    # way too much.
-
-    def function_arguments_size(function_name)
-      if @outer_context
-        return @outer_context.function_arguments_size(function_name)
-      end
-      @functions[function_name].arguments_size(self)
-    end
-
-    ##
-    # You might wonder why we don't calculate the size when we save the function. I don't
-    # have a good reason for not calculating the size during saving. TODO: Fix this.
-
-    def return_size(compile_data)
-      @return_type.size(compile_data)
+      @functions[function_definition.name] = function_definition
     end
 
     ##
@@ -125,7 +106,7 @@ module CMachineGrammar
     # addresses.
 
     def increment
-      self.class.new(self)
+      self.class.new(self, @level + 1)
     end
 
   end

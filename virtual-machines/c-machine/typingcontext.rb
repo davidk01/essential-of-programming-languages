@@ -1,7 +1,7 @@
 class TypingContext
 
-  def initialize(parent = {})
-    @context, @parent, @current_function = {}, parent, nil
+  def initialize(parent = {}, level = 0)
+    @context, @parent, @current_function, @level = {}, parent, nil, level
   end
 
   def []=(key, value)
@@ -9,7 +9,7 @@ class TypingContext
   end
 
   def increment
-    self.class.new(self)
+    self.class.new(self, @level + 1)
   end
 
   def [](key)
