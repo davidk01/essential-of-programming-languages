@@ -3,7 +3,7 @@
 class Stack < Struct.new(:store, :sp, :parent)
 
   def initialize
-    super([], -1, nil)
+    super([], -1, [])
   end
 
   def to_s

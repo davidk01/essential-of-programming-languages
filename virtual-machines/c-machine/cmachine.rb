@@ -50,7 +50,7 @@ class CMachine
   # Set up the initial stack and registers.
   
   def initialize(c)
-    @code, @stack, @pc, @ir, @return = c + Instruction[:call, 'main'],
+    @code, @stack, @pc, @ir, @return = c + Instruction[:call, :main],
      Stack.new, c.length - 1, nil, []
     resolve_references
   end
@@ -89,10 +89,10 @@ class CMachine
   
   def execute
     # Debugging output.
-    puts "Return: #{@return.map(&:to_s).join(', ')}."
-    puts "Instruction: #@pc, #@ir."
-    puts "Stack: #{@stack.to_s}."
-    puts "-----------------"
+    #puts "Return: #{@return.map(&:to_s).join(', ')}."
+    #puts "Instruction: #@pc, #@ir."
+    #puts "Stack: #{@stack.to_s}."
+    #puts "-----------------"
     #########
     case (sym = (@ir || Instruction.new(:noop, [])).instruction)
     when :label

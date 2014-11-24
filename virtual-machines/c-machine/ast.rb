@@ -11,6 +11,10 @@ module CMachineGrammar
 
   class ::Symbol
 
+    def type_check(_)
+      true
+    end
+
     ##
     # Not much to do here other than look up the type of the variable in the typing context.
 
@@ -118,11 +122,12 @@ module CMachineGrammar
     # Same as for +AddExp+
 
     def infer_type(typing_context)
+      return @type if @type
       expression_types = expressions.map {|e| e.infer_type(typing_context)}
       if !expression_types.all?(&:numeric?)
         raise StandardError, "Mis-typed subtraction expression."
       end
-      @type ||= expression_types.reduce(&:upper_bound)
+      @type = expression_types.reduce(&:upper_bound)
     end
 
     ##
@@ -185,6 +190,7 @@ module CMachineGrammar
   class MultExp < OpReducers
 
     def type_check(typing_context)
+      expressions.each {|e| e.type_check(typing_context)}
       expression_types = expressions.map {|e| e.infer_type(typing_context)}
       if !expression_types.all?(&:numeric?)
         raise StandardError, "Can not multiply non-numeric arguments."
@@ -252,14 +258,19 @@ module CMachineGrammar
 
   class LessEqExp < OpReducers
 
+    def type_check(typing_context)
+      expressions.each {|e| e.type_check(typing_context)}
+      expression_types = expressions.map {|e| e.infer_type(typing_context)}
+      if !expression_types.all?(&:numeric?)
+        raise StandardError, "Non numeric type found for ordering comparison."
+      end
+    end
+
     ##
-    # We can only compare numeric things. TODO: Pick up here.
+    # We can only compare numeric things.
 
     def infer_type(typing_context)
       expression_types = expressions.map {|e| e.infer_type(typing_context)}
-      if !expression_types.all?(&:numeric?)
-        raise StandardError, "Ordering comparison only applies to numeric types."
-      end
       if [IntType, FloatType].include?(expression_types.reduce(:upper_bound))
         BoolType
       else
@@ -381,6 +392,7 @@ module CMachineGrammar
     # revisit later.
 
     def type_check(typing_context)
+      test.type_check(typing_context)
       if test.infer_type(typing_context) != BoolType
         raise StandardError, "Test for if statement must be of boolean type."
       end
@@ -742,6 +754,8 @@ module CMachineGrammar
 
   class FunctionDefinition < Struct.new(:return_type, :name, :arguments, :body)
 
+    attr_reader :arguments_size
+
     ##
     # Extend the context with function arguments, set up some bookkeeping information like
     # which function we are currently working in and then typecheck the body.
@@ -750,6 +764,7 @@ module CMachineGrammar
       typing_context[name] = self
       typing_context.current_function = self
       arguments.each {|arg| typing_context[arg.name] = arg}
+      @arguments_size = arguments.map {|arg| arg.type.size(typing_context)}.reduce(&:+)
       body.type_check(typing_context)
     end
 
@@ -761,10 +776,6 @@ module CMachineGrammar
       function_context.save_function_definition(self)
       arguments.each {|arg_def| arg_def.compile(function_context)}
       I[:label, name] + body.compile(function_context)
-    end
-
-    def arguments_size(compile_data)
-      arguments.reduce(0) {|m, arg| m + arg.type.size(compile_data)}
     end
 
   end
@@ -822,6 +833,7 @@ module CMachineGrammar
     def type_check(typing_context)
       function = typing_context[name]
       function_argument_types = function.arguments.map(&:type)
+      @arguments_size ||= function_argument_types.reduce(0) {|m, t| m + t.size(typing_context)}
       call_argument_types = arguments.map {|arg| arg.infer_type(typing_context)}
       if !function_argument_types.zip(call_argument_types).all? {|a, b| a == b}
         raise StandardError, "Call site arguments do not match definition: #{name}."
@@ -840,12 +852,7 @@ module CMachineGrammar
     def compile(compile_data)
       # Evaluate the arguments and then transport them to the new stack
       arguments.flat_map {|arg| arg.compile(compile_data)} +
-       I[:pushstack, function_arguments_size(compile_data)] +
-       I[:call, name]
-    end
-
-    def function_arguments_size(compile_data)
-      compile_data.function_arguments_size(name)
+       I[:pushstack, @arguments_size] + I[:call, name]
     end
 
   end
