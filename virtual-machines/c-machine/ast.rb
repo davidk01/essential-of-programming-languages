@@ -15,7 +15,7 @@ module CMachineGrammar
     # Not much to do here other than look up the type of the variable in the typing context.
 
     def infer_type(typing_context)
-      @type ||= typing_context[self].type
+      typing_context[self].type
     end
 
   end
@@ -104,10 +104,10 @@ module CMachineGrammar
 
     def infer_type(typing_context)
       expression_types = expressions.map {|e| e.infer_type(typing_context)}
-      if !expression_types.all? {|t| t == IntType || t == FloatType}
+      if !expression_types.all?(&:numeric?)
         raise StandardError, "Mis-typed subtraction expression."
       end
-      @type ||= expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+      @type ||= expression_types.reduce(&:upper_bound)
     end
 
     ##
@@ -127,10 +127,10 @@ module CMachineGrammar
 
     def infer_type(typing_context)
       expression_types = expressions.map {|e| e.infer_type(typing_context)}
-      if !expression_types.all? {|t| t == IntType || t == FloatType}
+      if !expression_types.all?(&:numeric?)
         raise StandardError, "Mis-typed add expression."
       end
-      @type ||= expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+      @type ||= expression_types.reduce(&:upper_bound)
     end
 
     ##
@@ -174,10 +174,10 @@ module CMachineGrammar
 
     def infer_type(typing_context)
       expression_types = expressions.map {|e| e.infer_type(typing_context)}
-      if !expression_types.all? {|t| t == IntType || t == FloatType}
+      if !expression_types.all?(&:numeric?)
         raise StandardError, "Mis-typed multiplication expression."
       end
-      @type ||= expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+      @type ||= expression_types.reduce(&:upper_bound)
     end
 
     ##
@@ -194,10 +194,10 @@ module CMachineGrammar
 
     def infer_type(typing_context)
       expression_types = expressions.map {|e| e.infer_type(typing_context)}
-      if !expression_types.all? {|t| t == IntType || t == FloatType}
+      if !expression_types.all?(&:numeric?)
         raise StandardError, "Mis-typed division expression."
       end
-      @type ||= expression_types.any? {|e| e == FloatType} ? FloatType : IntType
+      @type ||= expression_types.reduce(&:upper_bound)
     end
 
     ##
@@ -234,6 +234,15 @@ module CMachineGrammar
     # We can only compare numeric things. TODO: Pick up here.
 
     def infer_type(typing_context)
+      expression_types = expressions.map {|e| e.infer_type(typing_context)}
+      if !expression_types.all?(&:numeric?)
+        raise StandardError, "Ordering comparison only applies to numeric types."
+      end
+      if [IntType, FloatType].include?(expression_types.reduce(:upper_bound))
+        BoolType
+      else
+        raise StandardError, "Can not order non-numeric types."
+      end
     end
 
     ##
@@ -501,9 +510,38 @@ module CMachineGrammar
     def self.size(_); 1; end
   end
 
-  class IntType < BaseType; end
+  ##
+  # Common operations for numeric types.
 
-  class FloatType < BaseType; end
+  module NumericType
+
+    def numeric?
+      true
+    end
+
+    def upper_bound(type)
+      if type == FloatType
+        FloatType
+      elsif IntType
+        self == IntType ? IntType : FloatType
+      else
+        raise StandardError, "Non numeric type: #{type}."
+      end
+    end
+
+  end
+
+  class IntType < BaseType
+
+    extend NumericType
+
+  end
+
+  class FloatType < BaseType
+
+    extend NumericType
+
+  end
 
   class BoolType < BaseType; end
 
@@ -683,14 +721,13 @@ module CMachineGrammar
   class FunctionDefinition < Struct.new(:return_type, :name, :arguments, :body)
 
     ##
-    # For the time being no forward references are allowed so within the function body only
-    # previously declared functions can be called. Unlike a struct declaration we need to do
-    # bit more than add the function to the context we also need to type check the body of
-    # the function.
+    # Extend the context with function arguments, set up some bookkeeping information like
+    # which function we are currently working in and then typecheck the body.
 
     def type_check(typing_context)
       typing_context[name] = self
       typing_context.current_function = self
+      arguments.each {|arg| typing_context[arg.name] = arg}
       body.type_check(typing_context)
     end
 
@@ -750,23 +787,18 @@ module CMachineGrammar
   end
 
   ##
-  # Instead of worrying about frame pointers and relative addressing I have made
-  # function calls a little expensive and kept the load and store instructions simple.
-  # A function call is a matter of evaluating the function arguments, pushing them on
-  # the stack and then shifting a set amount of arguments to the new stack that was
-  # just allocated for this function call. For example, if we have a function call
-  # f(1, 2) then here are what the stack operation look like starting with an initial
-  # stack S: S -> S 1 2 -> S | S'(1 2). The divider is put there by :pushstack operation
-  # and it just shifts k values from the initial stack to the new one so that the function
-  # can have access to the arguments in the context that it is operating. This creates
-  # problem though because in C-like languages we can declare pointers and we can take
-  # the address of a value on the stack. This is a problem because that address is going
-  # to be incorrect in the context on the new stack. I can just add a restriction of only
-  # allowing pointers to heap allocated objects and force all arguments to a function to
-  # be a heap pointer or I can allow pointers to stack objects outside of the current
-  # context by complicating the load and store instructions a little bit. TODO: Figure this out.
+  # TODO: Write explanation.
 
   class FunctionCall < Struct.new(:name, :arguments)
+
+    ##
+    # Pretty obvious. When calling a function the type is whatever is returned from the function
+    # and since the return type is part of the signature we just look at the return type for
+    # the function signature.
+
+    def infer_type(typing_context)
+      @type ||= typing_context[name].return_type
+    end
 
     def compile(compile_data)
       # Evaluate the arguments and then transport them to the new stack
